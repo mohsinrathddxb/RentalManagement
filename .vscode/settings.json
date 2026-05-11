@@ -1,0 +1,24 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^cd d:\\\\Personal\\\\RM\\\\RentalManagement\\\\rentalmanagement ; cmd /c npm run dev$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^cd d:\\\\Personal\\\\RM\\\\RentalManagement\\\\rentalmanagement ; cmd /c npm install vite @vitejs/plugin-react @tailwindcss/vite tailwindcss -D$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^cd d:\\\\Personal\\\\RM\\\\RentalManagement\\\\rentalmanagement ; cmd /c npm install lucide-react$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "timeout": true,
+        "/^cd d:\\\\Personal\\\\RM\\\\RentalManagement\\\\rentalmanagement ; cmd /c npm install recharts$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "npm install": true,
+        "pushd": true,
+        "popd": true
+    }
+}
