@@ -12,7 +12,7 @@ const navItems = [
 const heroSlides = [
   {
     title: 'Find a home that fits',
-    text: 'Browse available rental homes and stay connected with the Nyumbani Homes team.',
+    text: 'Browse available rental homes and stay connected with the Co- Accomodation team.',
   },
   {
     title: 'Rental records made easier',
@@ -27,7 +27,7 @@ const heroSlides = [
 const fallbackPosts = [
   {
     id: 1,
-    title: 'Welcome to Nyumbani Homes',
+    title: 'Welcome to Co- Accomodation',
     author: 'Admin',
     date: '2026-05-11',
     content:
@@ -118,7 +118,7 @@ function Header({ activeRoute, isHome }) {
               </button>
               <h1>
                 <a className="navbar-brand" href="#/home" onClick={() => setOpen(false)}>
-                  <img src="/images/logo.png" className="img-responsive" alt="Nyumbani Homes" />
+                  <img src="/images/logo.png" className="img-responsive" alt="Co- Accomodation" />
                 </a>
               </h1>
             </div>
@@ -210,7 +210,7 @@ function About() {
         <div className="furniture">
           <div className="container">
             <p className="lead react-copy">
-              Nyumbani Homes is a rental house management system for landlords and property teams.
+              Co- Accomodation is a rental house management system for landlords and property teams.
               This React frontend keeps the original public site layout while making the interface
               easier to maintain as components.
             </p>
@@ -416,7 +416,7 @@ function Contact() {
       </section>
       <section className="w3l-map" aria-label="Company offices map">
         <iframe
-          title="Nyumbani Homes office map"
+          title="Co- Accomodation office map"
           width="100%"
           height="300"
           src="https://maps.google.com/maps?width=100%&height=300&hl=en&q=Relaince%20center%20%2C%20Woodvale%20Grove%2C%20Westlands%20-%20Nairobi%2C%20Kenya+(Company%20Offices)&ie=UTF8&t=&z=15&iwloc=B&output=embed"

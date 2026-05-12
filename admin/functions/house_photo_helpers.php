@@ -5,6 +5,12 @@ function ensure_pic_type_column($connection) {
     if ($result && mysqli_num_rows($result) === 0) {
         mysqli_query($connection, "ALTER TABLE `house_pics` ADD COLUMN `pic_type` varchar(30) NOT NULL DEFAULT 'Beds'");
     }
+
+    $partitionResult = mysqli_query($connection, "SHOW COLUMNS FROM `house_pics` LIKE 'partition_id'");
+    if ($partitionResult && mysqli_num_rows($partitionResult) === 0) {
+        mysqli_query($connection, "ALTER TABLE `house_pics` ADD COLUMN `partition_id` int(11) DEFAULT NULL AFTER `house_id`");
+        mysqli_query($connection, "ALTER TABLE `house_pics` ADD KEY `partition_id` (`partition_id`)");
+    }
 }
 
 function normalize_house_pic_type($picType) {
@@ -12,7 +18,7 @@ function normalize_house_pic_type($picType) {
     return in_array($picType, $allowedTypes, true) ? $picType : 'Beds';
 }
 
-function upload_house_photos($connection, $houseId, $picType, $files) {
+function upload_house_photos($connection, $houseId, $picType, $files, $partitionId = null) {
     $allowedMimeTypes = [
         'image/jpeg' => 'jpg',
         'image/png' => 'png',
@@ -66,8 +72,13 @@ function upload_house_photos($connection, $houseId, $picType, $files) {
         $nextIdRow = mysqli_fetch_assoc($nextIdResult);
         $nextId = (int) $nextIdRow['next_id'];
 
-        $statement = mysqli_prepare($connection, "INSERT INTO `house_pics` (`pic_id`, `pic_name`, `house_id`, `pic_type`) VALUES (?, ?, ?, ?)");
-        mysqli_stmt_bind_param($statement, 'isis', $nextId, $storedPath, $houseId, $picType);
+        if ($partitionId) {
+            $statement = mysqli_prepare($connection, "INSERT INTO `house_pics` (`pic_id`, `pic_name`, `house_id`, `partition_id`, `pic_type`) VALUES (?, ?, ?, ?, ?)");
+            mysqli_stmt_bind_param($statement, 'isiis', $nextId, $storedPath, $houseId, $partitionId, $picType);
+        } else {
+            $statement = mysqli_prepare($connection, "INSERT INTO `house_pics` (`pic_id`, `pic_name`, `house_id`, `pic_type`) VALUES (?, ?, ?, ?)");
+            mysqli_stmt_bind_param($statement, 'isis', $nextId, $storedPath, $houseId, $picType);
+        }
 
         if (mysqli_stmt_execute($statement)) {
             $uploaded++;

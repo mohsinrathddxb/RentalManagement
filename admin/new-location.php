@@ -1,24 +1,58 @@
 <?php 
 
+    //a page name
+    $pgnm='Co- Accomodation: Add a new Location';
+    $error=' ';
+
+    //start sessions 
     ob_start();
+
+    //require a connector
     require_once "functions/db.php";
 
-    // If session variable is not set it will redirect to login page
+    //require the global file for errors
+    require_once "functions/errors.php";
 
-    if(!isset($_SESSION['email']) || empty($_SESSION['email'])){
+    // Initialize the session
+    session_start();
 
-      header("location: login.php");
-
-      exit;
-    }
-
+    // If user is not logged in, redirect to index otherwise, allow access
      if (is_logged_in_temporary()) {
-        //allow access
         require_admin_user();
+        //allow access
 
-    $email = $_SESSION['email'];
+        //take requests & actions
 
+     /*****************************************************
+                       action add a house
+     ***************************************************/
+                       if (isset($_POST['submit'])) 
+                       {
+                        $location=is_username($_POST['hname']);
 
+                        $sq="INSERT into `locations` (`location_name`,`geo_id`) values ('$location','undefined')";
+
+                        
+                        if ($mysqli -> query($sq)) {
+                            //success
+                            header("location:new-location.php?state=10");
+                        }else
+                        {
+                            //failed
+                            header("location:new-location.php?state=11");
+                       }
+                        
+                    }
+
+    //request to delete
+        if (isset($_GET['del'])) {
+            $locid=$_GET['del'];
+
+            //delete
+            mysqli_query($conn, "DELETE FROM `locations` where `id`=$locid");
+        }
+
+   
     /*******************************************************
                     introduce the admin header
     *******************************************************/
@@ -37,12 +71,12 @@
             <div class="container-fluid">
                 <div class="row bg-title">
                     <div class="col-lg-3 col-md-4 col-sm-4 col-xs-12">
-                        <h4 class="page-title"><?php echo $username;?></h4> </div>
+                        <h4 class="page-title"><?php echo 'Hey there, '.$username;?></h4> </div>
                     <div class="col-lg-9 col-sm-8 col-md-8 col-xs-12"> 
                         <ol class="breadcrumb">
-                            <li><a href="#">Dashboard</a></li>
-                            <li><a href="#">Administrators</a></li>
-                            <li class="active">New</li>
+                            <li><a href="index.php">Dashboard</a></li>
+                            <li class="active"><a href="houses.php">New Location</a></li>
+                            
                         </ol>
                     </div>
                     <!-- /.col-lg-12 -->
@@ -50,12 +84,43 @@
                 <!--.row-->
                 <div class="row">
                     <div class="col-md-12">
+                        <div style="">
+                            <?php 
+                            echo $error;
+                            ?>
+                        </div>
+
                         <div class="white-box">
-                            <h3 class="box-title m-b-0">Creating A New Admin</h3>
+                            <div class="row">
+                                <div style=" max-width:12em; margin-left:auto; margin-right:auto;">
+
+                                    <?php
+                                     $sqloc="SELECT * FROM `locations`";
+                                        $rec=mysqli_query($conn,$sqloc);
+
+                                        $i=1;
+                                        while ($row=mysqli_fetch_array($rec, MYSQLI_BOTH)) {
+                                             //existing records
+                                            $loc=$row['location_name'];
+                                            $locid=$row['id'];
+
+                                            echo "$i. $loc 
+                                                    <a href='new-location.php?del=$locid'><i class='fa fa-trash'></i></a>  
+
+                                                    <br>";
+
+                                            $i++;
+                                        }
+                                    ?>
+                                </div>
+                                
+                            </div>
+
+                            <h3 class="box-title m-b-0"><i class="fa fa-map-marker fa-3x"></i> Add A New Location</h3>
                             <p class="text-muted m-b-30 font-13"> Fill in the form below: </p>
                             <div class="row">
                                 <div class="col-sm-12 col-xs-12">
-                                    <form action="functions/new_admin.php" method="post">
+                                    <form action="new-location.php" method="post">
                                         <!-- <div class="form-group">
                                             <label for="exampleInputuname">User Name</label>
                                             <div class="input-group">
@@ -63,45 +128,15 @@
                                                 <input type="text" class="form-control" id="exampleInputuname" placeholder="Username"> </div>
                                         </div> -->
                                         <div class="form-group">
-                                            <label for="uname">User Name</label>
+                                            <label for="hname">Location Name *</label>
                                             <div class="input-group">
                                                 <div class="input-group-addon"><i class="fa fa-pencil"></i></div>
-                                                <input type="text" name="uname" class="form-control" id="uname" placeholder="e.g Co- Accomodation Admin One" required=""> </div>
+                                                <input type="text" required name="hname" class="form-control" id="hname" placeholder="Enter a new location Name" required=""> </div>
                                         </div>
-                                        <div class="form-group">
-                                            <label for="exampleInputEmail1">Email address</label>
-                                            <div class="input-group">
-                                                <div class="input-group-addon"><i class="ti-email"></i></div>
-                                                <input type="email" name="email" class="form-control" id="exampleInputEmail1" placeholder="Enter email" required=""> </div>
-                                        </div>
-                                        <div class="form-group">
-                                            <label for="role">Admin level</label>
-                                            <div class="input-group">
-                                                <div class="input-group-addon"><i class="fa fa-institution"></i></div>
-                                                <select name="role" class="form-control" id="role" required="">
-                                                    <option value="">**Select Admin Level**</option>
-                                                    <option value="level-0">Level 0</option>
-                                                    <option value="level-1">Level 1</option>
-                                                    <option value="level-2">Level 2</option>
-                                                    <option value="level-3">Level 3</option>
-                                                    <option value="user">Normal User</option>
-                                                </select>
-                                                 </div>
-                                        </div>
-                                        <div class="form-group">
-                                            <label for="exampleInputpwd1">Password</label>
-                                            <div class="input-group">
-                                                <div class="input-group-addon"><i class="ti-lock"></i></div>
-                                                <input type="password" name="password" id="Password" class="form-control" id="exampleInputpwd1" placeholder="Enter Password" required=""> </div>
-                                        </div>
-                                        <div class="form-group">
-                                            <label for="exampleInputpwd2">Confirm Password</label>
-                                            <div class="input-group">
-                                                <div class="input-group-addon"><i class="ti-lock"></i></div>
-                                                <input type="password" name="password2" id="ConfirmPassword" class="form-control" id="exampleInputpwd2" placeholder="Confirm Password" required=""> </div>
-                                                <div id="msg" style="padding-left: 10px;"></div>
-                                        </div>
-                                        <button type="submit" name="submit" class="btn btn-success waves-effect waves-light m-r-10">Submit</button>
+
+                                        
+
+                                        <button type="submit" name="submit" class="btn btn-success btn-lg waves-effect waves-light m-r-10 center"><i class="fa fa-plus-circle fa-lg"></i> Add this Location</button>
                                     </form>
                                 </div>
                             </div>
@@ -186,19 +221,11 @@
     <!--Style Switcher -->
     <script src="../plugins/bower_components/styleswitcher/jQuery.style.switcher.js"></script>
 
-    <!-- CHECK IF PASSWORDS MATCH -->
-        <script>
-                $(document).ready(function(){
-                    $("#ConfirmPassword").keyup(function(){
-                         if ($("#Password").val() != $("#ConfirmPassword").val()) {
-                             $("#msg").html("Password do not match").css("color","red");
-                         }else{
-                             $("#msg").html("Password matched").css("color","green");
-                        }
-                  });
-            });
-            </script> 
-    <!--END CHECK IF PASSWORDS MATCH -->
+    <!-- Local Javascript -->
+        <script type="text/javascript">
+            
+        </script>
+    <!--END of local JS -->
 
 </body>
 

@@ -183,8 +183,51 @@ $sms_shortcode = "TextSMS";
       return in_array($userrole, ['level-0', 'level-1', 'level-2', 'level-3'], true);
     }
 
+    function is_tenant_user(){
+      global $userrole;
+      if (empty($userrole)) {
+        is_logged_in_temporary();
+      }
+
+      return $userrole === 'user';
+    }
+
+    function get_logged_in_tenant_record(){
+      global $connection;
+
+      if (!is_logged_in_temporary() || !is_tenant_user()) {
+        return null;
+      }
+
+      $email = isset($_SESSION['email']) ? mysqli_real_escape_string($connection, $_SESSION['email']) : '';
+      if ($email === '') {
+        return null;
+      }
+
+      $queries = [
+        "SELECT * FROM `tenantsView` WHERE `email`='$email' AND `tenant_status`='Active' ORDER BY `tenantID` DESC LIMIT 1",
+        "SELECT * FROM `tenants` WHERE `email`='$email' AND `tenant_status`='Active' ORDER BY `tenantID` DESC LIMIT 1"
+      ];
+
+      foreach ($queries as $sql) {
+        $result = @mysqli_query($connection, $sql);
+        if ($result && mysqli_num_rows($result) === 1) {
+          return mysqli_fetch_assoc($result);
+        }
+      }
+
+      return null;
+    }
+
     function require_admin_user(){
       if (!is_logged_in_temporary() || !is_admin_user()) {
+        header('location:index.php?restricted=1');
+        exit();
+      }
+    }
+
+    function require_tenant_user(){
+      if (!is_logged_in_temporary() || !is_tenant_user()) {
         header('location:index.php?restricted=1');
         exit();
       }

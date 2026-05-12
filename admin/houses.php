@@ -1,6 +1,6 @@
 <?php
     
-    $pgnm="Nyumbani : View Houses";
+    $pgnm="Co- Accomodation : View Houses";
     $error=' ';
 
     //require the global file for errors
@@ -8,6 +8,9 @@
     
     ob_start();
     require_once "functions/db.php";
+    require_once "functions/tenant_helpers.php";
+    require_once "functions/partition_helpers.php";
+    require_once "functions/house_photo_helpers.php";
 
     // Initialize the session
 
@@ -24,6 +27,10 @@
     if (is_logged_in_temporary()) {
         #allow access
     $canManageHouses = is_admin_user();
+    ensure_tenant_schema($connection);
+    ensure_partition_tables($connection);
+    ensure_pic_type_column($connection);
+    $currentTenant = get_logged_in_tenant_record();
     
 
     $email = $_SESSION['email'];
@@ -87,7 +94,7 @@
                                         ;
                                     }
                                     elseif (isset($_GET["del_error"])) {
-                                        echo 
+                                        echo
                                         '<div class="alert alert-danger" >
                                               <a href="#" class="close" data-dismiss="alert" aria-label="close"></a>
                                              <strong>ERROR!! </strong><p> There was an error during deleting this record. Please try again.</p>
@@ -95,7 +102,7 @@
                                         ;
                                     }
                                     elseif (isset($_GET["photo_uploaded"])) {
-                                        echo 
+                                        echo
                                         '<div class="alert alert-success" >
                                               <a href="#" class="close" data-dismiss="alert" aria-label="close"></a>
                                              <strong>UPLOADED!! </strong><p> House photos have been uploaded successfully.</p>
@@ -103,7 +110,7 @@
                                         ;
                                     }
                                     elseif (isset($_GET["photo_deleted"])) {
-                                        echo 
+                                        echo
                                         '<div class="alert alert-warning" >
                                               <a href="#" class="close" data-dismiss="alert" aria-label="close"></a>
                                              <strong>DELETED!! </strong><p> The selected house photo has been removed.</p>
@@ -111,7 +118,7 @@
                                         ;
                                     }
                                     elseif (isset($_GET["photo_error"])) {
-                                        echo 
+                                        echo
                                         '<div class="alert alert-danger" >
                                               <a href="#" class="close" data-dismiss="alert" aria-label="close"></a>
                                              <strong>ERROR!! </strong><p> The photo could not be processed. Use JPG, PNG, GIF, or WEBP images below 5MB.</p>
@@ -131,6 +138,38 @@
                                         '<div class="alert alert-warning" >
                                               <a href="#" class="close" data-dismiss="alert" aria-label="close"></a>
                                              <strong>PARTIAL SAVE!! </strong><p> The new house was added, but the selected house image could not be processed.</p>
+                                        </div>'
+                                        ;
+                                    }
+                                    elseif (isset($_GET["partition_added"])) {
+                                        echo
+                                        '<div class="alert alert-success" >
+                                              <a href="#" class="close" data-dismiss="alert" aria-label="close"></a>
+                                             <strong>DONE!! </strong><p> The partition has been added successfully.</p>
+                                        </div>'
+                                        ;
+                                    }
+                                    elseif (isset($_GET["partition_updated"])) {
+                                        echo
+                                        '<div class="alert alert-success" >
+                                              <a href="#" class="close" data-dismiss="alert" aria-label="close"></a>
+                                             <strong>UPDATED!! </strong><p> The partition rent/details have been updated.</p>
+                                        </div>'
+                                        ;
+                                    }
+                                    elseif (isset($_GET["partition_deleted"])) {
+                                        echo
+                                        '<div class="alert alert-warning" >
+                                              <a href="#" class="close" data-dismiss="alert" aria-label="close"></a>
+                                             <strong>DELETED!! </strong><p> The partition has been deleted.</p>
+                                        </div>'
+                                        ;
+                                    }
+                                    elseif (isset($_GET["partition_error"])) {
+                                        echo
+                                        '<div class="alert alert-danger" >
+                                              <a href="#" class="close" data-dismiss="alert" aria-label="close"></a>
+                                             <strong>ERROR!! </strong><p> The partition could not be processed. Please check the partition number and rent amount.</p>
                                         </div>'
                                         ;
                                     }
@@ -160,6 +199,7 @@
                                                         <th>Bedrooms</th>
                                                         <th>House Status</th>
                                                         <th>Photos</th>
+                                                        <th>Partitions</th>
                                                         '.($canManageHouses ? '<th>Actions</th>' : '').'
                                                     </tr>
                                                 </thead>
@@ -173,6 +213,7 @@
                                                         <th>Bedrooms</th>
                                                         <th>House Status</th>
                                                         <th>Photos</th>
+                                                        <th>Partitions</th>
                                                         '.($canManageHouses ? '<th>Actions</th>' : '').'
                                                     </tr>
                                                 </tfoot>
@@ -183,7 +224,7 @@
                                         while ($row = mysqli_fetch_array($query)) {
                                             // $id = $row["id"]
                                             $i=$row["houseID"];
-                                            $photoQuery = mysqli_query($connection, "SELECT * FROM `house_pics` WHERE `house_id`='$i' ORDER BY `pic_id` DESC");
+                                            $photoQuery = mysqli_query($connection, "SELECT * FROM `house_pics` WHERE `house_id`='$i' AND `partition_id` IS NULL ORDER BY `pic_id` DESC");
                                             $photoCount = $photoQuery ? mysqli_num_rows($photoQuery) : 0;
                                             $photoCards = '';
 
@@ -192,11 +233,7 @@
                                                     $picId = (int) $photo["pic_id"];
                                                     $picPath = htmlspecialchars($photo["pic_name"], ENT_QUOTES, 'UTF-8');
                                                     $picType = isset($photo["pic_type"]) ? htmlspecialchars($photo["pic_type"], ENT_QUOTES, 'UTF-8') : 'Beds';
-                                                    $photoCards .= '
-                                                        <div class="col-sm-4" style="margin-bottom:15px;">
-                                                            <div style="border:1px solid #e4e7ea; padding:8px; min-height:190px;">
-                                                                <img src="'.$picPath.'" alt="'.$picType.' photo" style="width:100%; height:120px; object-fit:cover; margin-bottom:8px;">
-                                                                <span class="label label-info">'.$picType.'</span>
+                                                    $deletePhotoForm = $canManageHouses ? '
                                                                 <form action="functions/house_photo_manage.php" method="post" style="margin-top:8px;">
                                                                     <input type="hidden" name="pic_id" value="'.$picId.'">
                                                                     <input type="hidden" name="return_to" value="houses.php">
@@ -204,6 +241,15 @@
                                                                         <i class="fa fa-trash"></i> Delete
                                                                     </button>
                                                                 </form>
+                                                    ' : '';
+                                                    $photoCards .= '
+                                                        <div class="col-sm-4" style="margin-bottom:15px;">
+                                                            <div style="border:1px solid #e4e7ea; padding:8px; min-height:190px;">
+                                                                <a href="#" class="js-photo-preview" data-photo-src="'.$picPath.'" data-photo-title="'.$picType.' photo">
+                                                                    <img src="'.$picPath.'" alt="'.$picType.' photo" style="width:100%; height:120px; object-fit:cover; margin-bottom:8px; cursor:pointer;">
+                                                                </a>
+                                                                <span class="label label-info">'.$picType.'</span>
+                                                                '.$deletePhotoForm.'
                                                             </div>
                                                         </div>
                                                     ';
@@ -211,6 +257,191 @@
                                             } else {
                                                 $photoCards = '<div class="col-md-12"><i style="color:brown;">No bed or partition photos uploaded yet.</i></div>';
                                             }
+                                            $photoBadge = $photoCount > 0
+                                                ? '<a href="#" class="btn btn-info btn-xs" data-toggle="modal" data-target="#responsive-modal_photos'.$i.'" title="View uploaded photos"><i class="fa fa-image"></i> Image ('.$photoCount.')</a>'
+                                                : '<span class="label label-default">No Image</span>';
+                                            $partitionCount = count_house_partitions($connection, $i);
+                                            $partitionBadge = '<a href="#" class="label label-info" data-toggle="modal" data-target="#responsive-modal_partitions'.$i.'" title="View house partitions">'.$partitionCount.'</a>';
+                                            $partitionRows = get_house_partitions($connection, $i);
+                                            $partitionCards = '';
+
+                                            if ($partitionRows && mysqli_num_rows($partitionRows) > 0) {
+                                                while ($partition = mysqli_fetch_assoc($partitionRows)) {
+                                                    $partitionId = (int) $partition['partition_id'];
+                                                    $partitionNumber = htmlspecialchars($partition['partition_number'], ENT_QUOTES, 'UTF-8');
+                                                    $partitionRent = htmlspecialchars($partition['rent_amount'], ENT_QUOTES, 'UTF-8');
+                                                    $partitionStatus = htmlspecialchars($partition['partition_status'], ENT_QUOTES, 'UTF-8');
+                                                    $partitionDescription = htmlspecialchars((string) $partition['description'], ENT_QUOTES, 'UTF-8');
+                                                    $partitionFacilities = isset($partition['facilities']) ? $partition['facilities'] : '';
+                                                    $isOwnPartition = $currentTenant && isset($currentTenant['partition_id']) && (int) $currentTenant['partition_id'] === $partitionId;
+                                                    if (!$canManageHouses && $partitionStatus !== 'Vacant' && !$isOwnPartition) {
+                                                        continue;
+                                                    }
+                                                    $partitionPhotoCount = (int) $partition['photo_count'];
+                                                    $partitionPhotoQuery = mysqli_query($connection, "SELECT * FROM `house_pics` WHERE `partition_id`='$partitionId' ORDER BY `pic_id` DESC");
+                                                    $partitionPhotoCards = '';
+
+                                                    if ($partitionPhotoQuery && mysqli_num_rows($partitionPhotoQuery) > 0) {
+                                                        while ($partitionPhoto = mysqli_fetch_assoc($partitionPhotoQuery)) {
+                                                            $partitionPicId = (int) $partitionPhoto['pic_id'];
+                                                            $partitionPicPath = htmlspecialchars($partitionPhoto['pic_name'], ENT_QUOTES, 'UTF-8');
+                                                            $partitionDeleteForm = $canManageHouses ? '
+                                                                <form action="functions/house_photo_manage.php" method="post" style="margin-top:8px;">
+                                                                    <input type="hidden" name="pic_id" value="'.$partitionPicId.'">
+                                                                    <input type="hidden" name="return_to" value="houses.php">
+                                                                    <button type="submit" name="deleteHousePhoto" class="btn btn-danger btn-xs" onclick="return confirm(\'Delete this partition photo?\');">
+                                                                        <i class="fa fa-trash"></i> Delete
+                                                                    </button>
+                                                                </form>
+                                                            ' : '';
+                                                            $partitionPhotoCards .= '
+                                                                <div class="col-sm-4" style="margin-bottom:15px;">
+                                                                    <div style="border:1px solid #e4e7ea; padding:8px;">
+                                                                        <a href="#" class="js-photo-preview" data-photo-src="'.$partitionPicPath.'" data-photo-title="'.$partitionNumber.' photo">
+                                                                            <img src="'.$partitionPicPath.'" alt="'.$partitionNumber.' photo" style="width:100%; height:110px; object-fit:cover; margin-bottom:8px; cursor:pointer;">
+                                                                        </a>
+                                                                        '.$partitionDeleteForm.'
+                                                                    </div>
+                                                                </div>
+                                                            ';
+                                                        }
+                                                    } else {
+                                                        $partitionPhotoCards = '<div class="col-md-12"><i style="color:brown;">No photos uploaded for this partition yet.</i></div>';
+                                                    }
+
+                                                    $partitionActions = $canManageHouses ? '
+                                                        <button type="button" class="btn btn-info btn-xs" data-toggle="collapse" data-target="#partition-edit-'.$partitionId.'">
+                                                            <i class="fa fa-edit"></i> Edit Rent
+                                                        </button>
+                                                        <form action="functions/partition_manage.php" method="post" style="display:inline-block; margin-left:5px;">
+                                                            <input type="hidden" name="partition_id" value="'.$partitionId.'">
+                                                            <button type="submit" name="deletePartition" class="btn btn-danger btn-xs" onclick="return confirm(\'Delete this partition and its photos?\');">
+                                                                <i class="fa fa-trash"></i> Delete
+                                                            </button>
+                                                        </form>
+                                                    ' : '';
+
+                                                    $partitionEditForm = $canManageHouses ? '
+                                                        <div id="partition-edit-'.$partitionId.'" class="collapse" style="margin-top:12px;">
+                                                            <form action="functions/partition_manage.php" method="post">
+                                                                <input type="hidden" name="partition_id" value="'.$partitionId.'">
+                                                                <div class="row">
+                                                                    <div class="form-group col-md-3">
+                                                                        <label>Partition No./Name</label>
+                                                                        <input type="text" name="partition_number" class="form-control" value="'.$partitionNumber.'" required>
+                                                                    </div>
+                                                                    <div class="form-group col-md-3">
+                                                                        <label>Rent Amount</label>
+                                                                        <input type="number" min="0" step="0.01" name="rent_amount" class="form-control" value="'.$partitionRent.'" required>
+                                                                    </div>
+                                                                    <div class="form-group col-md-3">
+                                                                        <label>Status</label>
+                                                                        <select name="partition_status" class="form-control">
+                                                                            <option value="'.$partitionStatus.'" selected>'.$partitionStatus.'</option>
+                                                                            <option value="Vacant">Vacant</option>
+                                                                            <option value="Occupied">Occupied</option>
+                                                                        </select>
+                                                                    </div>
+                                                                    <div class="form-group col-md-3">
+                                                                        <label>Description</label>
+                                                                        <input type="text" name="description" class="form-control" value="'.$partitionDescription.'">
+                                                                    </div>
+                                                                    <div class="form-group col-md-12">
+                                                                        <label>Facilities</label>
+                                                                        <div style="border:1px solid #e4e7ea; padding:12px;">
+                                                                            '.render_partition_facility_checkboxes($partitionFacilities).'
+                                                                        </div>
+                                                                    </div>
+                                                                    <div class="col-md-12">
+                                                                        <button type="submit" name="editPartition" class="btn btn-success btn-sm">
+                                                                            <i class="fa fa-save"></i> Update Partition
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            </form>
+                                                        </div>
+                                                        <form action="functions/house_photo_manage.php" method="post" enctype="multipart/form-data" style="margin-top:12px;">
+                                                            <input type="hidden" name="house_id" value="'.$i.'">
+                                                            <input type="hidden" name="partition_id" value="'.$partitionId.'">
+                                                            <input type="hidden" name="pic_type" value="Partitions">
+                                                            <input type="hidden" name="return_to" value="houses.php">
+                                                            <div class="row">
+                                                                <div class="form-group col-md-8">
+                                                                    <input type="file" name="house_photos[]" class="form-control" accept="image/jpeg,image/png,image/gif,image/webp" multiple required>
+                                                                </div>
+                                                                <div class="form-group col-md-4">
+                                                                    <button type="submit" name="uploadHousePhoto" class="btn btn-success btn-sm">
+                                                                        <i class="fa fa-upload"></i> Upload Partition Photo(s)
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        </form>
+                                                    ' : '';
+
+                                                    $partitionCards .= '
+                                                        <div class="panel panel-default">
+                                                            <div class="panel-heading">
+                                                                <strong>'.$partitionNumber.'</strong>
+                                                                <span class="label label-info pull-right">'.$partitionPhotoCount.' Photos</span>
+                                                            </div>
+                                                            <div class="panel-body">
+                                                                <p><strong>Rent Amount:</strong> '.$partitionRent.'</p>
+                                                                <p><strong>Status:</strong> '.$partitionStatus.'</p>
+                                                                '.($partitionDescription !== '' ? '<p><strong>Description:</strong> '.$partitionDescription.'</p>' : '').'
+                                                                <p><strong>Facilities:</strong><br>'.render_partition_facilities_badges($partitionFacilities).'</p>
+                                                                '.$partitionActions.'
+                                                                '.$partitionEditForm.'
+                                                                <hr>
+                                                                <h5>Partition Photos</h5>
+                                                                <div class="row">'.$partitionPhotoCards.'</div>
+                                                            </div>
+                                                        </div>
+                                                    ';
+                                                }
+                                                if ($partitionCards === '') {
+                                                    $partitionCards = '<i style="color:brown;">No available partitions to display right now.</i>';
+                                                }
+                                            } else {
+                                                $partitionCards = '<i style="color:brown;">No partitions added for this house yet.</i>';
+                                            }
+                                            $addPartitionForm = $canManageHouses ? '
+                                                <form action="functions/partition_manage.php" method="post">
+                                                    <input type="hidden" name="house_id" value="'.$i.'">
+                                                    <div class="row">
+                                                        <div class="form-group col-md-3">
+                                                            <label>Partition No./Name: *</label>
+                                                            <input type="text" name="partition_number" class="form-control" placeholder="e.g. P1 or Room A" required>
+                                                        </div>
+                                                        <div class="form-group col-md-3">
+                                                            <label>Rent Amount: *</label>
+                                                            <input type="number" min="0" step="0.01" name="rent_amount" class="form-control" placeholder="e.g. 2500" required>
+                                                        </div>
+                                                        <div class="form-group col-md-3">
+                                                            <label>Status:</label>
+                                                            <select name="partition_status" class="form-control">
+                                                                <option value="Vacant">Vacant</option>
+                                                                <option value="Occupied">Occupied</option>
+                                                            </select>
+                                                        </div>
+                                                        <div class="form-group col-md-3">
+                                                            <label>Description:</label>
+                                                            <input type="text" name="description" class="form-control" placeholder="Optional">
+                                                        </div>
+                                                        <div class="form-group col-md-12">
+                                                            <label>Facilities:</label>
+                                                            <div style="border:1px solid #e4e7ea; padding:12px;">
+                                                                '.render_partition_facility_checkboxes().'
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-12">
+                                                            <button type="submit" name="addPartition" class="btn btn-success">
+                                                                <i class="fa fa-plus"></i> Add Partition
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </form>
+                                                <hr>
+                                            ' : '';
 
                                             if (!$canManageHouses) {
                                                 echo '
@@ -222,8 +453,57 @@
                                                         <td>'.$row["location"].'</td>
                                                         <td>'.$row["num_of_bedrooms"].'</td>
                                                         <td>'.$row["house_status"].'</td>
-                                                        <td><span class="label label-info">'.$photoCount.'</span></td>
+                                                        <td>'.$photoBadge.'</td>
+                                                        <td>'.$partitionBadge.'</td>
                                                     </tr>
+                                                ';
+
+                                                if ($photoCount > 0) {
+                                                    echo '
+                                                        <div id="responsive-modal_photos'.$i.'" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true" style="overflow-y:auto; display:none;">
+                                                            <div class="modal-dialog modal-lg">
+                                                                <div class="modal-content">
+                                                                    <div class="modal-header">
+                                                                        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                                                                        <h4 style="text-align:center;" class="modal-title">
+                                                                            <i class="fa fa-camera fa-3x"></i> Uploaded Photos for '.$row["house_name"].'
+                                                                        </h4>
+                                                                    </div>
+                                                                    <div class="modal-body">
+                                                                        <h4>Uploaded Photos ('.$photoCount.')</h4>
+                                                                        <div class="row">
+                                                                            '.$photoCards.'
+                                                                        </div>
+                                                                    </div>
+                                                                    <div class="modal-footer">
+                                                                        <button type="button" class="btn btn-default waves-effect" data-dismiss="modal">Close</button>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ';
+                                                }
+
+                                                echo '
+                                                    <div id="responsive-modal_partitions'.$i.'" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true" style="overflow-y:auto; display:none;">
+                                                        <div class="modal-dialog modal-lg">
+                                                            <div class="modal-content">
+                                                                <div class="modal-header">
+                                                                    <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                                                                    <h4 style="text-align:center;" class="modal-title">
+                                                                        <i class="fa fa-columns fa-3x"></i> Partitions for '.$row["house_name"].'
+                                                                    </h4>
+                                                                </div>
+                                                                <div class="modal-body">
+                                                                    <h4>Partitions ('.$partitionCount.')</h4>
+                                                                    '.$partitionCards.'
+                                                                </div>
+                                                                <div class="modal-footer">
+                                                                    <button type="button" class="btn btn-default waves-effect" data-dismiss="modal">Close</button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
                                                 ';
                                                 continue;
                                             }
@@ -242,7 +522,8 @@
                                             <td>'.$row["location"].'</td>
                                             <td>'.$row["num_of_bedrooms"].'</td>
                                             <td>'.$row["house_status"].'</td>
-                                            <td><span class="label label-info">'.$photoCount.'</span></td>
+                                            <td>'.$photoBadge.'</td>
+                                            <td>'.$partitionBadge.'</td>
                                             ';
 
                                             if ($canManageHouses) {
@@ -402,6 +683,29 @@
                                             </div>
                                             <!-- End Modal -->
 
+                                            <!-- /.modal to manage house partitions -->
+                                            <div id="responsive-modal_partitions'.$i.'" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true" style="overflow-y:auto; display:none;">
+                                                <div class="modal-dialog modal-lg">
+                                                    <div class="modal-content">
+                                                        <div class="modal-header">
+                                                            <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                                                            <h4 style="text-align:center;" class="modal-title">
+                                                                <i class="fa fa-columns fa-3x"></i> Partitions for '.$row["house_name"].'
+                                                            </h4>
+                                                        </div>
+                                                        <div class="modal-body">
+                                                            '.$addPartitionForm.'
+                                                            <h4>Partitions ('.$partitionCount.')</h4>
+                                                            '.$partitionCards.'
+                                                        </div>
+                                                        <div class="modal-footer">
+                                                            <button type="button" class="btn btn-default waves-effect" data-dismiss="modal">Close</button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <!-- End Modal -->
+
                                          </tr>
                                     ';
 
@@ -469,8 +773,35 @@
                 <!-- /.right-sidebar -->
             </div>
             <?php require "admin_footer.php"; ?>
+    <div id="photo-preview-modal" class="modal fade" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                    <h4 class="modal-title" id="photo-preview-title">Photo Preview</h4>
+                </div>
+                <div class="modal-body text-center">
+                    <img id="photo-preview-image" src="" alt="Photo preview" style="max-width:100%; max-height:75vh; object-fit:contain;">
+                </div>
+            </div>
+        </div>
+    </div>
     <script>
     $(document).ready(function() {
+        $(document).on('click', '.js-photo-preview', function(event) {
+            event.preventDefault();
+            var photoSrc = $(this).data('photo-src');
+            var photoTitle = $(this).data('photo-title') || 'Photo Preview';
+
+            $('#photo-preview-title').text(photoTitle);
+            $('#photo-preview-image').attr('src', photoSrc);
+            $('#photo-preview-modal').modal('show');
+        });
+
+        $('#photo-preview-modal').on('hidden.bs.modal', function() {
+            $('#photo-preview-image').attr('src', '');
+        });
+
         $('#myTable').DataTable();
         $(document).ready(function() {
             var table = $('#example').DataTable({

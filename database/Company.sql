@@ -31,6 +31,13 @@ CREATE TABLE `admin` (
   `id` int(11) NOT NULL,
   `name` varchar(150) NOT NULL,
   `role` varchar(50) NOT NULL DEFAULT 'level 0',
+  `tenant_id` int(11) DEFAULT NULL,
+  `emirates_id` varchar(100) DEFAULT NULL,
+  `property_address` text DEFAULT NULL,
+  `property_details` text DEFAULT NULL,
+  `property_document` text DEFAULT NULL,
+  `country` varchar(100) DEFAULT NULL,
+  `phone_number` varchar(30) DEFAULT NULL,
   `email` varchar(200) NOT NULL,
   `password` varchar(500) NOT NULL,
   `date` datetime NOT NULL DEFAULT current_timestamp()
@@ -124,7 +131,25 @@ CREATE TABLE `house_pics` (
   `pic_id` int(11) NOT NULL,
   `pic_name` text NOT NULL,
   `house_id` int(10) NOT NULL,
+  `partition_id` int(11) DEFAULT NULL,
   `pic_type` varchar(30) NOT NULL DEFAULT 'Beds'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `house_partitions`
+--
+
+CREATE TABLE `house_partitions` (
+  `partition_id` int(11) NOT NULL,
+  `house_id` int(11) NOT NULL,
+  `partition_number` varchar(100) NOT NULL,
+  `rent_amount` double NOT NULL DEFAULT 0,
+  `partition_status` varchar(50) NOT NULL DEFAULT 'Vacant',
+  `description` text DEFAULT NULL,
+  `facilities` text DEFAULT NULL,
+  `date_created` datetime NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -294,24 +319,72 @@ INSERT INTO `subscribers` (`id`, `email`, `date`) VALUES
 CREATE TABLE `tenants` (
   `tenantID` int(11) NOT NULL,
   `houseNumber` int(10) NOT NULL,
+  `partition_id` int(11) DEFAULT NULL,
   `tenant_name` text NOT NULL,
   `email` text NOT NULL,
-  `ID_number` int(10) NOT NULL,
+  `ID_number` varchar(50) NOT NULL,
   `profession` text NOT NULL,
-  `phone_number` varchar(13) NOT NULL,
+  `phone_number` varchar(30) NOT NULL,
+  `tenant_address` text DEFAULT NULL,
+  `tenant_home_country_address` text DEFAULT NULL,
+  `tenant_country` varchar(100) DEFAULT NULL,
+  `start_date` text DEFAULT NULL,
+  `end_date` text DEFAULT NULL,
+  `exit_date` text DEFAULT NULL,
+  `tenant_status` varchar(50) NOT NULL DEFAULT 'Active',
   `agreement_file` text DEFAULT NULL,
   `dateAdmitted` text DEFAULT NULL,
   `account` int(11) NOT NULL DEFAULT 0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `tenant_complaints`
+--
+
+CREATE TABLE `tenant_complaints` (
+  `complaint_id` int(11) NOT NULL,
+  `tenant_id` int(11) NOT NULL,
+  `house_id` int(11) DEFAULT NULL,
+  `partition_id` int(11) DEFAULT NULL,
+  `title` varchar(255) NOT NULL,
+  `description` text NOT NULL,
+  `image_path` text DEFAULT NULL,
+  `status` varchar(50) NOT NULL DEFAULT 'Open',
+  `admin_reason` text DEFAULT NULL,
+  `reopened_count` int(11) NOT NULL DEFAULT 0,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `tenant_notices`
+--
+
+CREATE TABLE `tenant_notices` (
+  `notice_id` int(11) NOT NULL,
+  `tenant_id` int(11) NOT NULL,
+  `subject` varchar(255) NOT NULL,
+  `message` text NOT NULL,
+  `sender_role` varchar(20) NOT NULL DEFAULT 'Tenant',
+  `created_by_name` varchar(150) DEFAULT NULL,
+  `status` varchar(50) NOT NULL DEFAULT 'Open',
+  `admin_reply` text DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `tenants`
 --
 
-INSERT INTO `tenants` (`tenantID`, `houseNumber`, `tenant_name`, `email`, `ID_number`, `profession`, `phone_number`, `agreement_file`, `dateAdmitted`, `account`) VALUES
-(18, 11, 'Obed Paul', 'paulnyaxx@gmail.com', 32160902, 'Programmer', '+254706748162', NULL, '2023-10-19', 1500),
-(19, 11, 'Ann Tenant', 'ann@localhost.com', 32160902, 'Teacher', '+254789489393', NULL, '2023-10-19', -7000),
-(20, 12, 'Someone Watching', 'someone@localhost.com', 12345623, 'Being Rich.', '+25478934756', NULL, '2023-10-19', -70000);
+INSERT INTO `tenants` (`tenantID`, `houseNumber`, `partition_id`, `tenant_name`, `email`, `ID_number`, `profession`, `phone_number`, `tenant_address`, `tenant_home_country_address`, `tenant_country`, `start_date`, `end_date`, `exit_date`, `tenant_status`, `agreement_file`, `dateAdmitted`, `account`) VALUES
+(18, 11, NULL, 'Obed Paul', 'paulnyaxx@gmail.com', '32160902', 'Programmer', '+254706748162', NULL, NULL, NULL, NULL, NULL, NULL, 'Active', NULL, '2023-10-19', 1500),
+(19, 11, NULL, 'Ann Tenant', 'ann@localhost.com', '32160902', 'Teacher', '+254789489393', NULL, NULL, NULL, NULL, NULL, NULL, 'Active', NULL, '2023-10-19', -7000),
+(20, 12, NULL, 'Someone Watching', 'someone@localhost.com', '12345623', 'Being Rich.', '+25478934756', NULL, NULL, NULL, NULL, NULL, NULL, 'Active', NULL, '2023-10-19', -70000);
 
 -- --------------------------------------------------------
 
@@ -322,11 +395,19 @@ INSERT INTO `tenants` (`tenantID`, `houseNumber`, `tenant_name`, `email`, `ID_nu
 CREATE TABLE `tenantsView` (
 `tenantID` int(11)
 ,`houseNumber` int(10)
+,`partition_id` int(11)
 ,`tenant_name` text
 ,`email` text
-,`ID_number` int(10)
+,`ID_number` varchar(50)
 ,`profession` text
-,`phone_number` varchar(13)
+,`phone_number` varchar(30)
+,`tenant_address` text
+,`tenant_home_country_address` text
+,`tenant_country` varchar(100)
+,`start_date` text
+,`end_date` text
+,`exit_date` text
+,`tenant_status` varchar(50)
 ,`dateAdmitted` text
 ,`agreement_file` text
 ,`house_name` text
@@ -334,6 +415,8 @@ CREATE TABLE `tenantsView` (
 ,`house_status` varchar(50)
 ,`rent_amount` double
 ,`houseID` int(11)
+,`partition_number` varchar(100)
+,`partition_status` varchar(50)
 );
 
 -- --------------------------------------------------------
@@ -394,7 +477,7 @@ CREATE   VIEW `paymentsView`  AS SELECT `payments`.`paymentID` AS `paymentID`, `
 --
 DROP TABLE IF EXISTS `tenantsView`;
 
-CREATE   VIEW `tenantsView`  AS SELECT `tenants`.`tenantID` AS `tenantID`, `tenants`.`houseNumber` AS `houseNumber`, `tenants`.`tenant_name` AS `tenant_name`, `tenants`.`email` AS `email`, `tenants`.`ID_number` AS `ID_number`, `tenants`.`profession` AS `profession`, `tenants`.`phone_number` AS `phone_number`, `tenants`.`dateAdmitted` AS `dateAdmitted`, `tenants`.`agreement_file` AS `agreement_file`, `houses`.`house_name` AS `house_name`, `houses`.`number_of_rooms` AS `number_of_rooms`, `houses`.`house_status` AS `house_status`, `houses`.`rent_amount` AS `rent_amount`, `houses`.`houseID` AS `houseID` FROM (`tenants` left join `houses` on(`tenants`.`houseNumber` = `houses`.`houseID`)) ;
+CREATE   VIEW `tenantsView`  AS SELECT `tenants`.`tenantID` AS `tenantID`, `tenants`.`houseNumber` AS `houseNumber`, `tenants`.`partition_id` AS `partition_id`, `tenants`.`tenant_name` AS `tenant_name`, `tenants`.`email` AS `email`, `tenants`.`ID_number` AS `ID_number`, `tenants`.`profession` AS `profession`, `tenants`.`phone_number` AS `phone_number`, `tenants`.`tenant_address` AS `tenant_address`, `tenants`.`tenant_home_country_address` AS `tenant_home_country_address`, `tenants`.`tenant_country` AS `tenant_country`, `tenants`.`start_date` AS `start_date`, `tenants`.`end_date` AS `end_date`, `tenants`.`exit_date` AS `exit_date`, `tenants`.`tenant_status` AS `tenant_status`, `tenants`.`dateAdmitted` AS `dateAdmitted`, `tenants`.`agreement_file` AS `agreement_file`, `houses`.`house_name` AS `house_name`, `houses`.`number_of_rooms` AS `number_of_rooms`, `houses`.`house_status` AS `house_status`, coalesce(`house_partitions`.`rent_amount`,`houses`.`rent_amount`) AS `rent_amount`, `houses`.`houseID` AS `houseID`, `house_partitions`.`partition_number` AS `partition_number`, `house_partitions`.`partition_status` AS `partition_status` FROM ((`tenants` left join `houses` on(`tenants`.`houseNumber` = `houses`.`houseID`)) left join `house_partitions` on(`tenants`.`partition_id` = `house_partitions`.`partition_id`)) ;
 
 --
 -- Indexes for dumped tables
@@ -405,6 +488,8 @@ CREATE   VIEW `tenantsView`  AS SELECT `tenants`.`tenantID` AS `tenantID`, `tena
 --
 ALTER TABLE `admin`
   ADD PRIMARY KEY (`id`);
+ALTER TABLE `admin`
+  ADD KEY `tenant_id` (`tenant_id`);
 
 --
 -- Indexes for table `comments`
@@ -424,6 +509,21 @@ ALTER TABLE `contacts`
 --
 ALTER TABLE `houses`
   ADD PRIMARY KEY (`houseID`);
+
+--
+-- Indexes for table `house_pics`
+--
+ALTER TABLE `house_pics`
+  ADD PRIMARY KEY (`pic_id`),
+  ADD KEY `house_id` (`house_id`),
+  ADD KEY `partition_id` (`partition_id`);
+
+--
+-- Indexes for table `house_partitions`
+--
+ALTER TABLE `house_partitions`
+  ADD PRIMARY KEY (`partition_id`),
+  ADD KEY `house_id` (`house_id`);
 
 --
 -- Indexes for table `invoices`
@@ -459,7 +559,15 @@ ALTER TABLE `subscribers`
 -- Indexes for table `tenants`
 --
 ALTER TABLE `tenants`
-  ADD PRIMARY KEY (`tenantID`);
+  ADD PRIMARY KEY (`tenantID`),
+  ADD KEY `partition_id` (`partition_id`);
+ALTER TABLE `tenant_complaints`
+  ADD PRIMARY KEY (`complaint_id`),
+  ADD KEY `tenant_id` (`tenant_id`),
+  ADD KEY `partition_id` (`partition_id`);
+ALTER TABLE `tenant_notices`
+  ADD PRIMARY KEY (`notice_id`),
+  ADD KEY `tenant_id` (`tenant_id`);
 
 --
 -- Indexes for table `transactions`
@@ -496,6 +604,18 @@ ALTER TABLE `houses`
   MODIFY `houseID` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=14;
 
 --
+-- AUTO_INCREMENT for table `house_pics`
+--
+ALTER TABLE `house_pics`
+  MODIFY `pic_id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `house_partitions`
+--
+ALTER TABLE `house_partitions`
+  MODIFY `partition_id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT for table `locations`
 --
 ALTER TABLE `locations`
@@ -524,6 +644,10 @@ ALTER TABLE `subscribers`
 --
 ALTER TABLE `tenants`
   MODIFY `tenantID` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=21;
+ALTER TABLE `tenant_complaints`
+  MODIFY `complaint_id` int(11) NOT NULL AUTO_INCREMENT;
+ALTER TABLE `tenant_notices`
+  MODIFY `notice_id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `transactions`

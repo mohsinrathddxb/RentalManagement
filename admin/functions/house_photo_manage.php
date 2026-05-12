@@ -23,13 +23,14 @@ ensure_pic_type_column($connection);
 
 if (isset($_POST['uploadHousePhoto'])) {
     $houseId = filter_input(INPUT_POST, 'house_id', FILTER_VALIDATE_INT);
+    $partitionId = filter_input(INPUT_POST, 'partition_id', FILTER_VALIDATE_INT);
     $picType = isset($_POST['pic_type']) ? normalize_house_pic_type($_POST['pic_type']) : 'Beds';
 
     if (!$houseId || empty($_FILES['house_photos']['name'][0])) {
         redirect_to_page('photo_error=missing');
     }
 
-    $uploaded = upload_house_photos($connection, $houseId, $picType, $_FILES['house_photos']);
+    $uploaded = upload_house_photos($connection, $houseId, $picType, $_FILES['house_photos'], $partitionId ?: null);
 
     if ($uploaded > 0) {
         redirect_to_page('photo_uploaded=' . $uploaded);

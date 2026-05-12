@@ -1,7 +1,7 @@
 <?php 
 
     //a page name
-    $pgnm='Nyumbani: Add a new house';
+    $pgnm='Co- Accomodation: Add a new house';
     $error=' ';
 
     //start sessions 

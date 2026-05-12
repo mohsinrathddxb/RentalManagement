@@ -6,6 +6,7 @@
 
       /* DATABASE CONNECTION*/
       require "functions/db.php";
+      require_once "functions/tenant_helpers.php";
       /*DATABASE CONNECTION */
 
        $conn=$connection; //global connection as initialized in functions/db.php
@@ -16,6 +17,7 @@
       $email = $password = "";
 
       $email_err = $password_err = "";
+      $success_msg = "";
 
 
 
@@ -56,10 +58,19 @@
           // Validate credentials
 
           if(empty($email_err) && empty($password_err)){
+              ensure_tenant_schema($connection);
+
+              // Self-heal missing tenant login accounts by email.
+              $tenantEmail = mysqli_real_escape_string($conn, is_email($email));
+              $tenantResult = mysqli_query($conn, "SELECT `tenantID`, `tenant_name`, `email`, `phone_number` FROM `tenants` WHERE `email`='$tenantEmail' AND `tenant_status`='Active' ORDER BY `tenantID` DESC LIMIT 1");
+              if ($tenantResult && mysqli_num_rows($tenantResult) === 1) {
+                  $tenantRow = mysqli_fetch_assoc($tenantResult);
+                  ensure_tenant_user_account($connection, (int) $tenantRow['tenantID'], $tenantRow['tenant_name'], $tenantRow['email'], $tenantRow['phone_number']);
+              }
 
               // Prepare a select statement
 
-              $sql = "SELECT name, role, email, password FROM admin WHERE email = ?";
+              $sql = "SELECT id, name, role, email, password, tenant_id FROM admin WHERE email = ?";
 
 
 
@@ -86,11 +97,36 @@
                       if(mysqli_stmt_num_rows($stmt) == 1){
 
                           // Bind result variables
-                          mysqli_stmt_bind_result($stmt, $name, $role, $email, $hashed_password);
+                          mysqli_stmt_bind_result($stmt, $admin_id, $name, $role, $email, $hashed_password, $tenant_id);
 
                           if(mysqli_stmt_fetch($stmt)){
 
-                              if(password_verify($password, $hashed_password)){
+                              $isValidPassword = password_verify($password, $hashed_password);
+
+                              if (!$isValidPassword && $role === 'user') {
+                                  $tenantPhoneResult = false;
+                                  if (!empty($tenant_id)) {
+                                      $tenantPhoneResult = mysqli_query($conn, "SELECT `phone_number` FROM `tenants` WHERE `tenantID`='" . (int) $tenant_id . "' LIMIT 1");
+                                  } else {
+                                      $safeEmailFallback = mysqli_real_escape_string($conn, $email);
+                                      $tenantPhoneResult = mysqli_query($conn, "SELECT `phone_number` FROM `tenants` WHERE `email`='$safeEmailFallback' AND `tenant_status`='Active' ORDER BY `tenantID` DESC LIMIT 1");
+                                  }
+
+                                  if ($tenantPhoneResult && mysqli_num_rows($tenantPhoneResult) === 1) {
+                                      $tenantPhoneRow = mysqli_fetch_assoc($tenantPhoneResult);
+                                      $normalizedEnteredPassword = normalize_phone_for_login($password);
+                                      $normalizedTenantPhone = normalize_phone_for_login($tenantPhoneRow['phone_number']);
+
+                                      if ($normalizedEnteredPassword !== '' && $normalizedTenantPhone !== '' && ($normalizedEnteredPassword === $normalizedTenantPhone || ltrim($normalizedEnteredPassword, '+') === ltrim($normalizedTenantPhone, '+'))) {
+                                          $isValidPassword = true;
+                                          $newHash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
+                                          $safeHash = mysqli_real_escape_string($conn, $newHash);
+                                          mysqli_query($conn, "UPDATE `admin` SET `password`='$safeHash' WHERE `id`='" . (int) $admin_id . "'");
+                                      }
+                                  }
+                              }
+
+                              if($isValidPassword){
 
                                   /* Password is correct, so start a new session and
 
@@ -156,6 +192,10 @@
 
       }
 
+      if (isset($_GET['registered'])) {
+          $success_msg = 'Your admin account has been created. Please log in with your email and password.';
+      }
+
 
 
       ?>
@@ -202,6 +242,7 @@
             <div class="white-box">
                 <form class="form-horizontal form-material" id="loginform" action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]);?>" method="post">
                     <h3 class="box-title m-b-20">Sign In</h3>
+                    <?php if ($success_msg !== "") { ?><p style="color:green;"><?php echo $success_msg; ?></p><?php } ?>
                      <p style="color:red;">  <?php echo $email_err; ?> </p>
                 <p style="color:red;">  <?php echo $password_err; ?> </p>
                     <div class="form-group ">
@@ -227,6 +268,9 @@
                         <div class="col-xs-12">
                             <button class="btn btn-info btn-lg btn-block text-uppercase waves-effect waves-light" type="submit" name="submit">Log In</button>
                         </div>
+                    </div>
+                    <div class="form-group text-center m-b-0">
+                        <a href="signup.php">Create admin account</a>
                     </div>
                     
                    
