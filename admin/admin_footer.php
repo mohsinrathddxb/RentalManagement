@@ -5,7 +5,7 @@
     </div>
     <!-- /#wrapper -->
     <!-- Jquery Cookie Handler -->
-    <script src="https://cdn.jsdelivr.net/npm/js-cookie@3.0.5/dist/js.cookie.min.js"></script>
+    <script src="js/vendor/js.cookie.min.js"></script>
     <!-- jQuery -->
     <script src="../plugins/bower_components/jquery/dist/jquery.min.js"></script>
     <!-- Bootstrap Core JavaScript -->
@@ -32,13 +32,13 @@
     <!-- for tables-->
      <script src="../plugins/bower_components/datatables/jquery.dataTables.min.js"></script>
     <!-- start - This is for export functionality only -->
-    <script src="https://cdn.datatables.net/buttons/1.2.2/js/dataTables.buttons.min.js"></script>
-    <script src="https://cdn.datatables.net/buttons/1.2.2/js/buttons.flash.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/2.5.0/jszip.min.js"></script>
-    <script src="https://cdn.rawgit.com/bpampuch/pdfmake/0.1.18/build/pdfmake.min.js"></script>
-    <script src="https://cdn.rawgit.com/bpampuch/pdfmake/0.1.18/build/vfs_fonts.js"></script>
-    <script src="https://cdn.datatables.net/buttons/1.2.2/js/buttons.html5.min.js"></script>
-    <script src="https://cdn.datatables.net/buttons/1.2.2/js/buttons.print.min.js"></script>
+    <script src="js/vendor/dataTables.buttons.min.js"></script>
+    <script src="js/vendor/buttons.flash.min.js"></script>
+    <script src="js/vendor/jszip.min.js"></script>
+    <script src="js/vendor/pdfmake.min.js"></script>
+    <script src="js/vendor/vfs_fonts.js"></script>
+    <script src="js/vendor/buttons.html5.min.js"></script>
+    <script src="js/vendor/buttons.print.min.js"></script>
     <!-- end - This is for export functionality only -->
     <!-- Sparkline chart JavaScript -->
     <script src="../plugins/bower_components/jquery-sparkline/jquery.sparkline.min.js"></script>
