@@ -22,6 +22,79 @@
         $canManageComplaints = is_admin_user();
         $currentTenant = get_logged_in_tenant_record();
 
+        function complaint_image_public_path($storedPath) {
+            $storedPath = trim((string) $storedPath);
+            if ($storedPath === '') {
+                return '';
+            }
+
+            $normalized = str_replace('\\', '/', $storedPath);
+
+            if (strpos($normalized, 'uploads/complaints/') === 0) {
+                return $normalized;
+            }
+
+            if (strpos($normalized, 'images/complaints/') === 0) {
+                return '../' . $normalized;
+            }
+
+            return $normalized;
+        }
+
+        function compress_uploaded_complaint_image($tmpPath, $targetPath, $mimeType, $sizeBytes) {
+            $compressionThreshold = 512000;
+
+            if ($sizeBytes <= $compressionThreshold) {
+                return @move_uploaded_file($tmpPath, $targetPath);
+            }
+
+            if (!function_exists('imagecreatetruecolor')) {
+                return @move_uploaded_file($tmpPath, $targetPath);
+            }
+
+            $image = null;
+
+            if ($mimeType === 'image/jpeg' && function_exists('imagecreatefromjpeg')) {
+                $image = @imagecreatefromjpeg($tmpPath);
+            } elseif ($mimeType === 'image/png' && function_exists('imagecreatefrompng')) {
+                $image = @imagecreatefrompng($tmpPath);
+            } elseif ($mimeType === 'image/gif' && function_exists('imagecreatefromgif')) {
+                $image = @imagecreatefromgif($tmpPath);
+            } elseif ($mimeType === 'image/webp' && function_exists('imagecreatefromwebp')) {
+                $image = @imagecreatefromwebp($tmpPath);
+            }
+
+            if (!$image) {
+                return @move_uploaded_file($tmpPath, $targetPath);
+            }
+
+            $result = false;
+
+            if ($mimeType === 'image/jpeg' && function_exists('imagejpeg')) {
+                $result = @imagejpeg($image, $targetPath, 72);
+            } elseif ($mimeType === 'image/png' && function_exists('imagepng')) {
+                @imagealphablending($image, false);
+                @imagesavealpha($image, true);
+                $result = @imagepng($image, $targetPath, 7);
+            } elseif ($mimeType === 'image/gif' && function_exists('imagegif')) {
+                $result = @imagegif($image, $targetPath);
+            } elseif ($mimeType === 'image/webp') {
+                if (function_exists('imagewebp')) {
+                    $result = @imagewebp($image, $targetPath, 72);
+                } elseif (function_exists('imagejpeg')) {
+                    $result = @imagejpeg($image, $targetPath, 72);
+                }
+            }
+
+            @imagedestroy($image);
+
+            if (!$result) {
+                return @move_uploaded_file($tmpPath, $targetPath);
+            }
+
+            return true;
+        }
+
         if (!$canManageComplaints && !$currentTenant) {
             header("location:index.php?restricted=1");
             exit;
@@ -39,15 +112,20 @@
                 if (!empty($_FILES['complaint_image']['name'])) {
                     $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/gif' => 'gif', 'image/webp' => 'webp'];
                     if (isset($allowed[$_FILES['complaint_image']['type']]) && (int) $_FILES['complaint_image']['size'] <= 5242880) {
-                        $uploadDir = __DIR__ . '/../images/complaints/';
+                        $uploadDir = __DIR__ . '/uploads/complaints/';
                         if (!is_dir($uploadDir)) {
                             @mkdir($uploadDir, 0777, true);
                         }
                         $extension = $allowed[$_FILES['complaint_image']['type']];
                         $fileName = 'complaint_' . time() . '_' . mt_rand(1000, 9999) . '.' . $extension;
                         $target = $uploadDir . $fileName;
-                        if (@move_uploaded_file($_FILES['complaint_image']['tmp_name'], $target)) {
-                            $imagePath = 'images/complaints/' . $fileName;
+                        if (compress_uploaded_complaint_image(
+                            $_FILES['complaint_image']['tmp_name'],
+                            $target,
+                            $_FILES['complaint_image']['type'],
+                            (int) $_FILES['complaint_image']['size']
+                        )) {
+                            $imagePath = 'uploads/complaints/' . $fileName;
                         }
                     }
                 }
@@ -177,6 +255,7 @@
                         $title = htmlspecialchars($row['title'], ENT_QUOTES, 'UTF-8');
                         $description = nl2br(htmlspecialchars($row['description'], ENT_QUOTES, 'UTF-8'));
                         $imagePath = htmlspecialchars((string) $row['image_path'], ENT_QUOTES, 'UTF-8');
+                        $imageUrl = complaint_image_public_path((string) $row['image_path']);
                         echo '
                             <div style="border:1px solid #e4e7ea; padding:15px; margin-bottom:15px;">
                                 <h4>'.$title.' <span class="label label-info" style="margin-left:8px;">'.$status.'</span></h4>
@@ -184,7 +263,7 @@
                                 <p><strong>House:</strong> '.htmlspecialchars((string) $row['house_name'], ENT_QUOTES, 'UTF-8').'</p>
                                 <p><strong>Partition:</strong> '.htmlspecialchars((string) $row['partition_number'], ENT_QUOTES, 'UTF-8').'</p>
                                 <p><strong>Description:</strong><br>'.$description.'</p>
-                                '.($imagePath !== '' ? '<p><strong>Issue Image:</strong><br><a href="#" class="js-photo-preview" data-photo-src="'.$imagePath.'" data-photo-title="'.$title.'"><img src="'.$imagePath.'" style="max-width:220px; height:auto; cursor:pointer; border:1px solid #e4e7ea;"></a></p>' : '').'
+                                '.($imageUrl !== '' ? '<p><strong>Issue Image:</strong><br><a href="#" class="js-photo-preview" data-photo-src="'.htmlspecialchars($imageUrl, ENT_QUOTES, 'UTF-8').'" data-photo-title="'.$title.'"><img src="'.htmlspecialchars($imageUrl, ENT_QUOTES, 'UTF-8').'" style="max-width:220px; height:auto; cursor:pointer; border:1px solid #e4e7ea;"></a></p>' : '').'
                                 '.($reason !== '' ? '<p><strong>Admin Reason:</strong> '.$reason.'</p>' : '').'
                                 <p><strong>Updated:</strong> '.htmlspecialchars($row['updated_at'], ENT_QUOTES, 'UTF-8').'</p>
                         ';
@@ -215,13 +294,15 @@
                                     </div>
                                 </form>
                             ';
-                        } elseif (!in_array($status, ['Open', 'Reopened'], true)) {
+                        } elseif (in_array($status, ['Resolved', 'In Progress'], true)) {
                             echo '
                                 <form action="complaints.php" method="post">
                                     <input type="hidden" name="complaint_id" value="'.$complaintId.'">
                                     <button type="submit" name="reopenComplaint" class="btn btn-warning">Reopen Complaint</button>
                                 </form>
                             ';
+                        } elseif ($status === 'Rejected') {
+                            echo '<p><strong>Tenant Action:</strong> View only. Rejected complaints cannot be reopened.</p>';
                         }
 
                         echo '</div>';

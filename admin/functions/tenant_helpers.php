@@ -88,6 +88,10 @@ function ensure_tenant_portal_tables($connection) {
             `message` text NOT NULL,
             `sender_role` varchar(20) NOT NULL DEFAULT 'Tenant',
             `created_by_name` varchar(150) DEFAULT NULL,
+            `document_url` text DEFAULT NULL,
+            `document_label` varchar(150) DEFAULT NULL,
+            `secondary_document_url` text DEFAULT NULL,
+            `secondary_document_label` varchar(150) DEFAULT NULL,
             `status` varchar(50) NOT NULL DEFAULT 'Open',
             `admin_reply` text DEFAULT NULL,
             `created_at` datetime NOT NULL DEFAULT current_timestamp(),
@@ -105,6 +109,26 @@ function ensure_tenant_portal_tables($connection) {
     $createdByNameColumn = mysqli_query($connection, "SHOW COLUMNS FROM `tenant_notices` LIKE 'created_by_name'");
     if ($createdByNameColumn && mysqli_num_rows($createdByNameColumn) === 0) {
         @mysqli_query($connection, "ALTER TABLE `tenant_notices` ADD COLUMN `created_by_name` varchar(150) DEFAULT NULL AFTER `sender_role`");
+    }
+
+    $documentUrlColumn = mysqli_query($connection, "SHOW COLUMNS FROM `tenant_notices` LIKE 'document_url'");
+    if ($documentUrlColumn && mysqli_num_rows($documentUrlColumn) === 0) {
+        @mysqli_query($connection, "ALTER TABLE `tenant_notices` ADD COLUMN `document_url` text DEFAULT NULL AFTER `created_by_name`");
+    }
+
+    $documentLabelColumn = mysqli_query($connection, "SHOW COLUMNS FROM `tenant_notices` LIKE 'document_label'");
+    if ($documentLabelColumn && mysqli_num_rows($documentLabelColumn) === 0) {
+        @mysqli_query($connection, "ALTER TABLE `tenant_notices` ADD COLUMN `document_label` varchar(150) DEFAULT NULL AFTER `document_url`");
+    }
+
+    $secondaryDocumentUrlColumn = mysqli_query($connection, "SHOW COLUMNS FROM `tenant_notices` LIKE 'secondary_document_url'");
+    if ($secondaryDocumentUrlColumn && mysqli_num_rows($secondaryDocumentUrlColumn) === 0) {
+        @mysqli_query($connection, "ALTER TABLE `tenant_notices` ADD COLUMN `secondary_document_url` text DEFAULT NULL AFTER `document_label`");
+    }
+
+    $secondaryDocumentLabelColumn = mysqli_query($connection, "SHOW COLUMNS FROM `tenant_notices` LIKE 'secondary_document_label'");
+    if ($secondaryDocumentLabelColumn && mysqli_num_rows($secondaryDocumentLabelColumn) === 0) {
+        @mysqli_query($connection, "ALTER TABLE `tenant_notices` ADD COLUMN `secondary_document_label` varchar(150) DEFAULT NULL AFTER `secondary_document_url`");
     }
 }
 

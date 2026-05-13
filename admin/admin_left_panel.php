@@ -58,6 +58,16 @@
                             <li><a href="payments.php">View Payments</a></li>
                         </ul>
                     </li>
+
+                    <li><a href="#" class="waves-effect"><i class="fa fa-file-text-o fa-2x"></i> <span class="hide-menu"> || Expenses <span class="fa arrow"></span></span></a>
+                        <ul class="nav nav-second-level">
+                            <li><a href="new-expense.php">Add Expense</a></li>
+                            <li><a href="expenses.php">View Expenses</a></li>
+                        </ul>
+                    </li>
+
+                    <li><a href="reports.php" class="waves-effect"><i class="fa fa-bar-chart fa-2x"></i> <span class="hide-menu"> || Reports</span></a>
+                    </li>
                     <?php } ?>
 
                     <li><a href="notices.php" class="waves-effect"><i class="fa fa-envelope fa-2x"></i> <span class="hide-menu">  ||  <?php echo is_admin_user() ? 'Notices' : 'Notices'; ?></span></a>

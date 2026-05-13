@@ -8,6 +8,7 @@ ob_start();
 
 require_once "functions/db.php";
 require_once "functions/tenant_helpers.php";
+require_once "functions/invoice_pdf_helpers.php";
 require_once "functions/errors.php";
 
 session_start();
@@ -15,6 +16,7 @@ session_start();
 if (is_logged_in_temporary()) {
     require_admin_user();
     ensure_tenant_schema($connection);
+    ensure_invoice_pdf_columns($connection);
 
     if (isset($_POST['newPayment'])) {
         $tenantId = isset($_POST['tenID']) ? (int) $_POST['tenID'] : 0;
@@ -76,9 +78,11 @@ if (is_logged_in_temporary()) {
         $sqlTransactions = "INSERT INTO `transactions` (`actor`, `time`, `description`)
             VALUES ('Admin ($username)', '$timesnap', '$username added payment of ".format_money_amount($amountPaid)." for $safeTenantName, under invoice ID: $safeInvoiceNumber')";
 
-        $noticeMessage = '';
+        $noticeMessage = 'A payment of KES ' . format_money_amount($amountPaid) . ' was received for invoice ' . $invoiceNumber . '.';
         if ($balanceCents > 0) {
-            $noticeMessage = 'A payment of KES ' . format_money_amount($amountPaid) . ' was received for invoice ' . $invoiceNumber . '. Remaining amount to pay is KES ' . format_money_amount($balance) . '.';
+            $noticeMessage .= ' Remaining amount to pay is KES ' . format_money_amount($balance) . '.';
+        } else {
+            $noticeMessage .= ' This invoice is now fully paid.';
         }
 
         $mysqli->autocommit(FALSE);
@@ -87,13 +91,22 @@ if (is_logged_in_temporary()) {
         $mysqli->query($sqlInv) ? null : $state = false;
         $mysqli->query($sqlTen) ? null : $state = false;
         $mysqli->query($sqlPayment) ? null : $state = false;
+        $paymentId = $mysqli->insert_id;
         $mysqli->query($sqlTransactions) ? null : $state = false;
 
-        if ($state && $noticeMessage !== '') {
+        if ($state && $noticeMessage !== '' && $paymentId > 0) {
             $safeNoticeMessage = mysqli_real_escape_string($connection, $noticeMessage);
             $safeCreatedBy = mysqli_real_escape_string($connection, isset($_SESSION['name']) ? $_SESSION['name'] : 'Admin');
-            $noticeSql = "INSERT INTO `tenant_notices` (`tenant_id`, `subject`, `message`, `sender_role`, `created_by_name`, `status`)
-                VALUES ('$tenantId', 'Partial Payment Update', '$safeNoticeMessage', 'Admin', '$safeCreatedBy', 'Published')";
+            $invoicePdfUrl = 'invoice-pdf.php?invoice=' . rawurlencode($invoiceNumber);
+            $receiptPdfUrl = 'payment-receipt-pdf.php?payment=' . (int) $paymentId;
+            $safeInvoicePdfUrl = mysqli_real_escape_string($connection, $invoicePdfUrl);
+            $safeReceiptPdfUrl = mysqli_real_escape_string($connection, $receiptPdfUrl);
+            $noticeSubject = $balanceCents > 0 ? 'Payment Update' : 'Payment Receipt';
+            $safeNoticeSubject = mysqli_real_escape_string($connection, $noticeSubject);
+            $noticeSql = "INSERT INTO `tenant_notices`
+                (`tenant_id`, `subject`, `message`, `sender_role`, `created_by_name`, `document_url`, `document_label`, `secondary_document_url`, `secondary_document_label`, `status`)
+                VALUES
+                ('$tenantId', '$safeNoticeSubject', '$safeNoticeMessage', 'Admin', '$safeCreatedBy', '$safeInvoicePdfUrl', 'Invoice PDF', '$safeReceiptPdfUrl', 'Receipt PDF', 'Published')";
             $mysqli->query($noticeSql) ? null : $state = false;
         }
 

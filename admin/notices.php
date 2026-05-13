@@ -254,6 +254,21 @@ if (is_logged_in_temporary()) {
                     $reply = htmlspecialchars((string) $row['admin_reply'], ENT_QUOTES, 'UTF-8');
                     $senderRole = isset($row['sender_role']) ? htmlspecialchars($row['sender_role'], ENT_QUOTES, 'UTF-8') : 'Tenant';
                     $createdByName = htmlspecialchars((string) ($row['created_by_name'] ?? ''), ENT_QUOTES, 'UTF-8');
+                    $documentUrl = trim((string) ($row['document_url'] ?? ''));
+                    $documentLabel = trim((string) ($row['document_label'] ?? ''));
+                    $secondaryDocumentUrl = trim((string) ($row['secondary_document_url'] ?? ''));
+                    $secondaryDocumentLabel = trim((string) ($row['secondary_document_label'] ?? ''));
+                    $documentsHtml = '';
+
+                    if ($documentUrl !== '' && $documentLabel !== '') {
+                        $documentsHtml .= '<a class="btn btn-xs btn-info" href="' . htmlspecialchars($documentUrl, ENT_QUOTES, 'UTF-8') . '">'
+                            . htmlspecialchars($documentLabel, ENT_QUOTES, 'UTF-8') . '</a> ';
+                    }
+
+                    if ($secondaryDocumentUrl !== '' && $secondaryDocumentLabel !== '') {
+                        $documentsHtml .= '<a class="btn btn-xs btn-success" href="' . htmlspecialchars($secondaryDocumentUrl, ENT_QUOTES, 'UTF-8') . '">'
+                            . htmlspecialchars($secondaryDocumentLabel, ENT_QUOTES, 'UTF-8') . '</a>';
+                    }
 
                     echo '
                         <div style="border:1px solid #e4e7ea; padding:15px; margin-bottom:15px;">
@@ -264,6 +279,7 @@ if (is_logged_in_temporary()) {
                                    <p><strong>Stay:</strong> '.htmlspecialchars((string) $row['house_name'], ENT_QUOTES, 'UTF-8').' / '.htmlspecialchars((string) $row['partition_number'], ENT_QUOTES, 'UTF-8').'</p>'
                                 : '<p><strong>From:</strong> '.($senderRole === 'Admin' ? ($createdByName !== '' ? $createdByName : 'Admin') : 'You').'</p>').'
                             <p><strong>Message:</strong><br>'.$message.'</p>
+                            '.($documentsHtml !== '' ? '<p><strong>Documents:</strong><br>'.$documentsHtml.'</p>' : '').'
                             '.($reply !== '' ? '<p><strong>Admin Reply:</strong> '.$reply.'</p>' : '').'
                             <p><strong>Updated:</strong> '.htmlspecialchars($row['updated_at'], ENT_QUOTES, 'UTF-8').'</p>
                     ';

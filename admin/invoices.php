@@ -7,6 +7,7 @@ require_once "functions/errors.php";
 ob_start();
 require_once "functions/db.php";
 require_once "functions/tenant_helpers.php";
+require_once "functions/invoice_pdf_helpers.php";
 
 session_start();
 
@@ -18,6 +19,7 @@ if(!isset($_SESSION['email']) || empty($_SESSION['email'])){
 if (is_logged_in_temporary()) {
     $canManageInvoices = is_admin_user();
     ensure_tenant_schema($connection);
+    ensure_invoice_pdf_columns($connection);
     $currentTenant = get_logged_in_tenant_record();
 
     if ($canManageInvoices) {
@@ -28,10 +30,16 @@ if (is_logged_in_temporary()) {
                 t.`phone_number`,
                 i.`tenantID`,
                 i.`amountDue`,
+                i.`total_amount`,
                 i.`dateOfInvoice`,
                 i.`dateDue`,
                 i.`status`,
-                i.`comment`
+                i.`comment`,
+                (
+                    SELECT MAX(p.`paymentID`)
+                    FROM `payments` p
+                    WHERE p.`invoiceNumber` = i.`invoiceNumber`
+                ) AS `latestPaymentID`
             FROM `invoices` i
             LEFT JOIN `tenants` t ON i.`tenantID` = t.`tenantID`
             ORDER BY i.`dateOfInvoice` DESC, i.`invoiceNumber` DESC
@@ -45,10 +53,16 @@ if (is_logged_in_temporary()) {
                 t.`phone_number`,
                 i.`tenantID`,
                 i.`amountDue`,
+                i.`total_amount`,
                 i.`dateOfInvoice`,
                 i.`dateDue`,
                 i.`status`,
-                i.`comment`
+                i.`comment`,
+                (
+                    SELECT MAX(p.`paymentID`)
+                    FROM `payments` p
+                    WHERE p.`invoiceNumber` = i.`invoiceNumber`
+                ) AS `latestPaymentID`
             FROM `invoices` i
             LEFT JOIN `tenants` t ON i.`tenantID` = t.`tenantID`
             WHERE i.`tenantID`='$tenantId'
@@ -111,6 +125,7 @@ if (is_logged_in_temporary()) {
                                         <th>Due Date</th>
                                         <th>Invoice status</th>
                                         <th>Comments</th>
+                                        <th>Documents</th>
                                         '.($canManageInvoices ? '<th>Actions</th>' : '').'
                                     </tr>
                                 </thead>
@@ -124,6 +139,7 @@ if (is_logged_in_temporary()) {
                                         <th>Due Date</th>
                                         <th>Invoice status</th>
                                         <th>Comments</th>
+                                        <th>Documents</th>
                                         '.($canManageInvoices ? '<th>Actions</th>' : '').'
                                     </tr>
                                 </tfoot>
@@ -141,16 +157,23 @@ if (is_logged_in_temporary()) {
                                     $statusLabel = '<span class="label label-danger">'.htmlspecialchars($row["status"], ENT_QUOTES, 'UTF-8').'</span>';
                                 }
 
+                                $invoiceLink = '<a class="btn btn-xs btn-info" href="invoice-pdf.php?invoice='.urlencode($row["invoiceNumber"]).'">Invoice PDF</a>';
+                                $receiptLink = '';
+                                if (!empty($row["latestPaymentID"])) {
+                                    $receiptLink = ' <a class="btn btn-xs btn-success" href="payment-receipt-pdf.php?payment='.(int) $row["latestPaymentID"].'">Latest Receipt</a>';
+                                }
+
                                 echo '
                                 <tr>
                                     <td>'.$row["invoiceNumber"].'</td>
                                     <td>'.$row["tenant_name"].'</td>
                                     <td>'.$row["phone_number"].'</td>
-                                    <td>'.$row["amountDue"].'</td>
+                                    <td>'.format_money_amount($row["amountDue"]).'</td>
                                     <td>'.$row["dateOfInvoice"].'</td>
                                     <td>'.$row["dateDue"].'</td>
                                     <td>'.$statusLabel.'</td>
                                     <td>'.$row["comment"].'</td>
+                                    <td>'.$invoiceLink.$receiptLink.'</td>
                                     '.($canManageInvoices ? '<td><a href="#"><i class="fa fa-trash" data-toggle="modal" data-target="#responsive-modal'.$row["invoiceNumber"].'" title="delete" style="color:red;"></i></a></td>' : '').'
 
                                     '.($canManageInvoices ? '

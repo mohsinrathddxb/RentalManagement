@@ -77,7 +77,6 @@
     *******************************************************/
     require "admin_left_panel.php";
 
-
 ?>
 
 
@@ -315,7 +314,7 @@
                                                     }
                                                     echo "$total";
                                                 ?>
-                                                   <br> <span style="margin-top: 0.1em; font-size:0.5em"> (KES) </span>
+                                                   <br> <span style="margin-top: 0.1em; font-size:0.5em"> (AED) </span>
                                                 </h3> 
                                          </div>
                                         <div class="col-md-12 col-sm-12 col-xs-12">
@@ -329,7 +328,7 @@
                                     <div class="w3-red w3-card-4" style="padding:0.4em; margin-top:0.2em;margin-bottom:0.2em;">
                                     <div class="w3-white" style="border-radius: 1em;">
                                     <div class="col-in row">
-                                        <div class="col-md-6 col-sm-6 col-xs-6"> <i class="fa fa-usd fa-5x"></i>
+                                        <div class="col-md-6 col-sm-6 col-xs-6"> <span style="font-size:2.2em; font-weight:700; line-height:1;">AED</span>
                                             <h5 class="text-muted vb">Pending Invoices</h5> </div>
                                          <div class="col-md-6 col-sm-6 col-xs-6">
                                             <h3 class="counter text-right m-t-15 text-danger" style="font-size: 2.2em;">
@@ -342,7 +341,7 @@
                                                     }
                                                     echo "$total";
                                                 ?>
-                                                   <br> <span style="margin-top: 0.1em; font-size:0.5em"> (KES) </span>
+                                                   <br> <span style="margin-top: 0.1em; font-size:0.5em"> (AED) </span>
                                                 </h3> 
                                          </div>
                                         <div class="col-md-12 col-sm-12 col-xs-12">
@@ -356,7 +355,7 @@
                                     <div class="w3-orange w3-card-4" style="padding:0.4em;margin-top:0.2em;margin-bottom:0.2em;">
                                     <div class="w3-white" style="border-radius: 1em;">
                                     <div class="col-in row">
-                                        <div class="col-md-6 col-sm-6 col-xs-6"> <i class="fa fa-usd fa-5x"></i>
+                                        <div class="col-md-6 col-sm-6 col-xs-6"> <span style="font-size:2.2em; font-weight:700; line-height:1;">AED</span>
                                             <h5 class="text-muted vb">Tenant Balances</h5> </div>
                                          <div class="col-md-6 col-sm-6 col-xs-6">
                                             <h3 class="counter text-right m-t-15" style="font-size: 2.2em;color:orange;">
@@ -370,7 +369,7 @@
                                                     }
                                                     echo "$total";
                                                 ?>
-                                                   <br> <span style="margin-top: 0.1em; font-size:0.5em"> (KES) </span>
+                                                   <br> <span style="margin-top: 0.1em; font-size:0.5em"> (AED) </span>
                                                 </h3> 
                                          </div>
                                         <div class="col-md-12 col-sm-12 col-xs-12">

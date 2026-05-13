@@ -7,6 +7,7 @@ require_once "functions/errors.php";
 ob_start();
 require_once "functions/db.php";
 require_once "functions/tenant_helpers.php";
+require_once "functions/invoice_pdf_helpers.php";
 
 session_start();
 
@@ -18,6 +19,7 @@ if(!isset($_SESSION['email']) || empty($_SESSION['email'])){
 if (is_logged_in_temporary()) {
     require_admin_user();
     ensure_tenant_schema($connection);
+    ensure_invoice_pdf_columns($connection);
 
     $sql = "
         SELECT
@@ -93,6 +95,7 @@ if (is_logged_in_temporary()) {
                                         <th>Balance</th>
                                         <th>Date Paid</th>
                                         <th>Comments</th>
+                                        <th>Documents</th>
                                         <th>Actions</th>
                                     </tr>
                                 </thead>
@@ -106,6 +109,7 @@ if (is_logged_in_temporary()) {
                                         <th>Balance</th>
                                         <th>Date Paid</th>
                                         <th>Comments</th>
+                                        <th>Documents</th>
                                         <th>Actions</th>
                                     </tr>
                                 </tfoot>
@@ -114,16 +118,19 @@ if (is_logged_in_temporary()) {
                             }
 
                             while ($row = mysqli_fetch_array($query)) {
+                                $documents = '<a class="btn btn-xs btn-info" href="invoice-pdf.php?invoice='.urlencode($row["invoiceNumber"]).'">Invoice PDF</a> ';
+                                $documents .= '<a class="btn btn-xs btn-success" href="payment-receipt-pdf.php?payment='.(int) $row["paymentID"].'">Receipt PDF</a>';
                                 echo '
                                 <tr>
                                     <td>'.$row["invoiceNumber"].'</td>
                                     <td>'.$row["tenant_name"].'</td>
                                     <td>'.$row["house_name"].'</td>
-                                    <td>'.$row["expectedAmount"].'</td>
-                                    <td>'.$row["amountPaid"].'</td>
-                                    <td>'.$row["balance"].'</td>
+                                    <td>'.format_money_amount($row["expectedAmount"]).'</td>
+                                    <td>'.format_money_amount($row["amountPaid"]).'</td>
+                                    <td>'.format_money_amount($row["balance"]).'</td>
                                     <td>'.$row["dateofPayment"].'</td>
                                     <td>'.$row["comment"].'</td>
+                                    <td>'.$documents.'</td>
                                     <td><a href="#"><i class="fa fa-trash" data-toggle="modal" data-target="#responsive-modal'.$row["paymentID"].'" title="delete" style="color:red;"></i></a></td>
 
                                     <div id="responsive-modal'.$row["paymentID"].'" class="modal fade" tabindex="-1" role="dialog" aria-hidden="true" style="display: none;">

@@ -10,6 +10,7 @@ ob_start();
 
 require_once "functions/db.php";
 require_once "functions/tenant_helpers.php";
+require_once "functions/invoice_pdf_helpers.php";
 require_once "functions/errors.php";
 
 session_start();
@@ -17,14 +18,17 @@ session_start();
 if (is_logged_in_temporary()) {
     require_admin_user();
     ensure_tenant_schema($connection);
+    ensure_invoice_pdf_columns($connection);
 
     if (isset($_POST['addInvoice'])) {
         $tenantIdRent = isset($_POST['tname']) ? uncrack($_POST['tname']) : '';
         $invoiceDueDate = isset($_POST['ddate']) ? uncrack($_POST['ddate']) : '';
         $comment = isset($_POST['comment']) ? uncrack($_POST['comment']) : '';
         $invoiceMonth = isset($_POST['invoice_month']) ? uncrack($_POST['invoice_month']) : $defaultInvoiceMonth;
+        $bookingAmountCents = isset($_POST['booking_amount']) ? money_to_cents($_POST['booking_amount']) : 0;
+        $depositAmountCents = isset($_POST['deposit_amount']) ? money_to_cents($_POST['deposit_amount']) : 0;
 
-        if ($tenantIdRent === '' || strpos($tenantIdRent, '_') === false || $invoiceMonth === '') {
+        if ($tenantIdRent === '' || strpos($tenantIdRent, '_') === false || $invoiceMonth === '' || $bookingAmountCents < 0 || $depositAmountCents < 0) {
             header('location:new-invoice.php?state=6&invoice_error=missing');
             exit();
         }
@@ -32,7 +36,7 @@ if (is_logged_in_temporary()) {
         $invoiceDate = $invoiceMonth . '-01';
         $invoiceid = 'INV' . date('YmdHis');
         $tenantId = substr($tenantIdRent, 0, strpos($tenantIdRent, '_'));
-        $rentAmount = (float) substr($tenantIdRent, strpos($tenantIdRent, '_') + 1);
+        $rentAmountCents = money_to_cents(substr($tenantIdRent, strpos($tenantIdRent, '_') + 1));
         $istatus = 'unpaid';
 
         $sqt = "SELECT `tenant_name`,`phone_number`,`account` FROM `tenants` WHERE `tenantID`='$tenantId' LIMIT 1";
@@ -47,26 +51,31 @@ if (is_logged_in_temporary()) {
         $tenantName = $ten_record['tenant_name'];
         $firstName = strpos($tenantName, ' ') !== false ? substr($tenantName, 0, strpos($tenantName, ' ')) : $tenantName;
         $phone = $ten_record['phone_number'];
-        $account = isset($ten_record['account']) ? (float) $ten_record['account'] : 0;
+        $accountCents = isset($ten_record['account']) ? money_to_cents($ten_record['account']) : 0;
 
-        $rentAmount -= $account;
+        $totalAmountCents = $rentAmountCents + $bookingAmountCents + $depositAmountCents;
+        $creditAppliedCents = min($accountCents, $totalAmountCents);
+        $amountDueCents = max(0, $totalAmountCents - $creditAppliedCents);
+        $remainingAccountCents = max(0, $accountCents - $creditAppliedCents);
 
-        if ($rentAmount == 0) {
-            $account = 0;
+        if ($amountDueCents === 0) {
             $istatus = 'paid';
-        } elseif ($rentAmount < 0) {
-            $account = $rentAmount * -1;
-            $istatus = 'paid';
-        } else {
-            $account -= $rentAmount;
         }
 
-        $sqInvoice = "INSERT INTO `invoices`
-            (`invoiceNumber`,`tenantID`,`dateOfInvoice`,`dateDue`,`amountDue`,`comment`,`status`)
-            VALUES
-            ('$invoiceid','$tenantId','$invoiceDate','$invoiceDueDate','$rentAmount','$comment','$istatus')";
+        $rentAmount = cents_to_money($rentAmountCents);
+        $bookingAmount = cents_to_money($bookingAmountCents);
+        $depositAmount = cents_to_money($depositAmountCents);
+        $creditApplied = cents_to_money($creditAppliedCents);
+        $totalAmount = cents_to_money($totalAmountCents);
+        $amountDue = cents_to_money($amountDueCents);
+        $remainingAccount = cents_to_money($remainingAccountCents);
 
-        $sq_account = "UPDATE `tenants` SET `account`='$account' WHERE `tenantID`='$tenantId'";
+        $sqInvoice = "INSERT INTO `invoices`
+            (`invoiceNumber`,`tenantID`,`dateOfInvoice`,`dateDue`,`amountDue`,`rent_amount`,`booking_amount`,`deposit_amount`,`credit_applied`,`total_amount`,`comment`,`status`)
+            VALUES
+            ('$invoiceid','$tenantId','$invoiceDate','$invoiceDueDate','$amountDue','$rentAmount','$bookingAmount','$depositAmount','$creditApplied','$totalAmount','$comment','$istatus')";
+
+        $sq_account = "UPDATE `tenants` SET `account`='$remainingAccount' WHERE `tenantID`='$tenantId'";
 
         $sql_transactions = "INSERT INTO `transactions` (`actor`,`time`,`description`)
             VALUES ('Admin ($username)', '$timesnap','$username added a new rental invoice ($invoiceid) for tenant ($tenantName) for month $invoiceMonth at $timesnap.')";
@@ -85,7 +94,7 @@ if (is_logged_in_temporary()) {
             if ($status) {
                 $mysqli->commit();
 
-                $finalmessage = "Greetings ".$firstName.", This is a reminder that you're supposed to pay the rent of KES.".$rentAmount." for ".$invoiceMonth." by date ".$invoiceDueDate.".";
+                $finalmessage = "Greetings ".$firstName.", This is a reminder that invoice ".$invoiceid." for ".$invoiceMonth." has been issued. Total due is KES ".format_money_amount($amountDue)." by date ".$invoiceDueDate.".";
                 @sendSMS($phone, $finalmessage);
 
                 header('location:invoices.php?state=5');
@@ -184,6 +193,22 @@ if (is_logged_in_temporary()) {
                                     <div class="input-group">
                                         <div class="input-group-addon"><i class="fa fa-calendar"></i></div>
                                         <input type="date" name="ddate" class="form-control" id="ddate" placeholder="Choose Date">
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="booking_amount">Booking Amount:</label>
+                                    <div class="input-group">
+                                        <div class="input-group-addon"><i class="fa fa-tag"></i></div>
+                                        <input type="number" min="0" step="0.01" name="booking_amount" class="form-control" id="booking_amount" value="0" placeholder="Enter optional booking amount">
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="deposit_amount">Security Deposit:</label>
+                                    <div class="input-group">
+                                        <div class="input-group-addon"><i class="fa fa-lock"></i></div>
+                                        <input type="number" min="0" step="0.01" name="deposit_amount" class="form-control" id="deposit_amount" value="0" placeholder="Enter optional deposit amount">
                                     </div>
                                 </div>
 
