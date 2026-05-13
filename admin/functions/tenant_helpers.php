@@ -1,6 +1,20 @@
 <?php
 
 function ensure_tenant_columns($connection) {
+    $tenantIdResult = mysqli_query($connection, "SHOW COLUMNS FROM `tenants` LIKE 'tenantID'");
+    if ($tenantIdResult && mysqli_num_rows($tenantIdResult) === 1) {
+        $tenantIdColumn = mysqli_fetch_assoc($tenantIdResult);
+
+        $tenantPrimaryResult = mysqli_query($connection, "SHOW INDEX FROM `tenants` WHERE Key_name = 'PRIMARY'");
+        if ($tenantPrimaryResult && mysqli_num_rows($tenantPrimaryResult) === 0) {
+            @mysqli_query($connection, "ALTER TABLE `tenants` ADD PRIMARY KEY (`tenantID`)");
+        }
+
+        if (stripos($tenantIdColumn['Extra'], 'auto_increment') === false) {
+            @mysqli_query($connection, "ALTER TABLE `tenants` MODIFY `tenantID` int(11) NOT NULL AUTO_INCREMENT");
+        }
+    }
+
     $columns = [
         'partition_id' => "ALTER TABLE `tenants` ADD COLUMN `partition_id` int(11) DEFAULT NULL AFTER `houseNumber`",
         'tenant_address' => "ALTER TABLE `tenants` ADD COLUMN `tenant_address` text DEFAULT NULL AFTER `phone_number`",
@@ -15,34 +29,38 @@ function ensure_tenant_columns($connection) {
     foreach ($columns as $column => $sql) {
         $result = mysqli_query($connection, "SHOW COLUMNS FROM `tenants` LIKE '$column'");
         if ($result && mysqli_num_rows($result) === 0) {
-            mysqli_query($connection, $sql);
+            @mysqli_query($connection, $sql);
         }
     }
 
     $idResult = mysqli_query($connection, "SHOW COLUMNS FROM `tenants` LIKE 'ID_number'");
     if ($idResult && ($idColumn = mysqli_fetch_assoc($idResult)) && stripos($idColumn['Type'], 'int') !== false) {
-        mysqli_query($connection, "ALTER TABLE `tenants` MODIFY `ID_number` varchar(50) NOT NULL");
+        @mysqli_query($connection, "ALTER TABLE `tenants` MODIFY `ID_number` varchar(50) NOT NULL");
     }
 
     $phoneResult = mysqli_query($connection, "SHOW COLUMNS FROM `tenants` LIKE 'phone_number'");
     if ($phoneResult && ($phoneColumn = mysqli_fetch_assoc($phoneResult)) && stripos($phoneColumn['Type'], 'varchar(30)') === false) {
-        mysqli_query($connection, "ALTER TABLE `tenants` MODIFY `phone_number` varchar(30) NOT NULL");
+        @mysqli_query($connection, "ALTER TABLE `tenants` MODIFY `phone_number` varchar(30) NOT NULL");
     }
 
     $indexResult = mysqli_query($connection, "SHOW INDEX FROM `tenants` WHERE Key_name = 'partition_id'");
     if ($indexResult && mysqli_num_rows($indexResult) === 0) {
-        mysqli_query($connection, "ALTER TABLE `tenants` ADD KEY `partition_id` (`partition_id`)");
+        @mysqli_query($connection, "ALTER TABLE `tenants` ADD KEY `partition_id` (`partition_id`)");
     }
 
     $adminTenantColumn = mysqli_query($connection, "SHOW COLUMNS FROM `admin` LIKE 'tenant_id'");
     if ($adminTenantColumn && mysqli_num_rows($adminTenantColumn) === 0) {
-        mysqli_query($connection, "ALTER TABLE `admin` ADD COLUMN `tenant_id` int(11) DEFAULT NULL AFTER `role`");
-        mysqli_query($connection, "ALTER TABLE `admin` ADD KEY `tenant_id` (`tenant_id`)");
+        @mysqli_query($connection, "ALTER TABLE `admin` ADD COLUMN `tenant_id` int(11) DEFAULT NULL AFTER `role`");
+    }
+
+    $adminTenantIndex = mysqli_query($connection, "SHOW INDEX FROM `admin` WHERE Key_name = 'tenant_id'");
+    if ($adminTenantIndex && mysqli_num_rows($adminTenantIndex) === 0) {
+        @mysqli_query($connection, "ALTER TABLE `admin` ADD KEY `tenant_id` (`tenant_id`)");
     }
 }
 
 function ensure_tenant_portal_tables($connection) {
-    mysqli_query($connection, "
+    @mysqli_query($connection, "
         CREATE TABLE IF NOT EXISTS `tenant_complaints` (
             `complaint_id` int(11) NOT NULL AUTO_INCREMENT,
             `tenant_id` int(11) NOT NULL,
@@ -62,7 +80,7 @@ function ensure_tenant_portal_tables($connection) {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
     ");
 
-    mysqli_query($connection, "
+    @mysqli_query($connection, "
         CREATE TABLE IF NOT EXISTS `tenant_notices` (
             `notice_id` int(11) NOT NULL AUTO_INCREMENT,
             `tenant_id` int(11) NOT NULL,
@@ -81,12 +99,12 @@ function ensure_tenant_portal_tables($connection) {
 
     $senderRoleColumn = mysqli_query($connection, "SHOW COLUMNS FROM `tenant_notices` LIKE 'sender_role'");
     if ($senderRoleColumn && mysqli_num_rows($senderRoleColumn) === 0) {
-        mysqli_query($connection, "ALTER TABLE `tenant_notices` ADD COLUMN `sender_role` varchar(20) NOT NULL DEFAULT 'Tenant' AFTER `message`");
+        @mysqli_query($connection, "ALTER TABLE `tenant_notices` ADD COLUMN `sender_role` varchar(20) NOT NULL DEFAULT 'Tenant' AFTER `message`");
     }
 
     $createdByNameColumn = mysqli_query($connection, "SHOW COLUMNS FROM `tenant_notices` LIKE 'created_by_name'");
     if ($createdByNameColumn && mysqli_num_rows($createdByNameColumn) === 0) {
-        mysqli_query($connection, "ALTER TABLE `tenant_notices` ADD COLUMN `created_by_name` varchar(150) DEFAULT NULL AFTER `sender_role`");
+        @mysqli_query($connection, "ALTER TABLE `tenant_notices` ADD COLUMN `created_by_name` varchar(150) DEFAULT NULL AFTER `sender_role`");
     }
 }
 
@@ -111,17 +129,22 @@ function ensure_tenant_user_account($connection, $tenantId, $tenantName, $email,
         return (bool) mysqli_query($connection, "
             UPDATE `admin`
             SET `email`='$safeEmail', `name`='$safeName', `password`='$safePassword', `role`='user'
-            WHERE `id`='".(int) $row['id']."'
+            WHERE `id`='" . (int) $row['id'] . "'
         ");
     }
 
-    $existingByEmail = mysqli_query($connection, "SELECT `id` FROM `admin` WHERE `email`='$safeEmail' LIMIT 1");
+    $existingByEmail = mysqli_query($connection, "SELECT `id`, `role` FROM `admin` WHERE `email`='$safeEmail' LIMIT 1");
     if ($existingByEmail && mysqli_num_rows($existingByEmail) === 1) {
         $row = mysqli_fetch_assoc($existingByEmail);
+
+        if ($row['role'] !== 'user') {
+            return false;
+        }
+
         return (bool) mysqli_query($connection, "
             UPDATE `admin`
             SET `name`='$safeName', `password`='$safePassword', `role`='user', `tenant_id`='$tenantId'
-            WHERE `id`='".(int) $row['id']."'
+            WHERE `id`='" . (int) $row['id'] . "'
         ");
     }
 
@@ -176,45 +199,62 @@ function normalize_phone_for_login($phoneNumber) {
 }
 
 function refresh_tenants_view($connection) {
-    mysqli_query($connection, "DROP VIEW IF EXISTS `tenantsView`");
-    mysqli_query($connection, "
-        CREATE VIEW `tenantsView` AS
-        SELECT
-            `tenants`.`tenantID` AS `tenantID`,
-            `tenants`.`houseNumber` AS `houseNumber`,
-            `tenants`.`partition_id` AS `partition_id`,
-            `tenants`.`tenant_name` AS `tenant_name`,
-            `tenants`.`email` AS `email`,
-            `tenants`.`ID_number` AS `ID_number`,
-            `tenants`.`profession` AS `profession`,
-            `tenants`.`phone_number` AS `phone_number`,
-            `tenants`.`tenant_address` AS `tenant_address`,
-            `tenants`.`tenant_home_country_address` AS `tenant_home_country_address`,
-            `tenants`.`tenant_country` AS `tenant_country`,
-            `tenants`.`start_date` AS `start_date`,
-            `tenants`.`end_date` AS `end_date`,
-            `tenants`.`exit_date` AS `exit_date`,
-            `tenants`.`tenant_status` AS `tenant_status`,
-            `tenants`.`dateAdmitted` AS `dateAdmitted`,
-            `tenants`.`agreement_file` AS `agreement_file`,
-            `houses`.`house_name` AS `house_name`,
-            `houses`.`number_of_rooms` AS `number_of_rooms`,
-            `houses`.`house_status` AS `house_status`,
-            COALESCE(`house_partitions`.`rent_amount`, `houses`.`rent_amount`) AS `rent_amount`,
-            `houses`.`houseID` AS `houseID`,
-            `house_partitions`.`partition_number` AS `partition_number`,
-            `house_partitions`.`partition_status` AS `partition_status`
-        FROM ((`tenants`
-            LEFT JOIN `houses` ON (`tenants`.`houseNumber` = `houses`.`houseID`))
-            LEFT JOIN `house_partitions` ON (`tenants`.`partition_id` = `house_partitions`.`partition_id`))
-    ");
+    try {
+        @mysqli_query($connection, "DROP VIEW IF EXISTS `tenantsView`");
+        @mysqli_query($connection, "
+            CREATE VIEW `tenantsView` AS
+            SELECT
+                `tenants`.`tenantID` AS `tenantID`,
+                `tenants`.`houseNumber` AS `houseNumber`,
+                `tenants`.`partition_id` AS `partition_id`,
+                `tenants`.`tenant_name` AS `tenant_name`,
+                `tenants`.`email` AS `email`,
+                `tenants`.`ID_number` AS `ID_number`,
+                `tenants`.`profession` AS `profession`,
+                `tenants`.`phone_number` AS `phone_number`,
+                `tenants`.`tenant_address` AS `tenant_address`,
+                `tenants`.`tenant_home_country_address` AS `tenant_home_country_address`,
+                `tenants`.`tenant_country` AS `tenant_country`,
+                `tenants`.`start_date` AS `start_date`,
+                `tenants`.`end_date` AS `end_date`,
+                `tenants`.`exit_date` AS `exit_date`,
+                `tenants`.`tenant_status` AS `tenant_status`,
+                `tenants`.`dateAdmitted` AS `dateAdmitted`,
+                `tenants`.`agreement_file` AS `agreement_file`,
+                `houses`.`house_name` AS `house_name`,
+                `houses`.`number_of_rooms` AS `number_of_rooms`,
+                `houses`.`house_status` AS `house_status`,
+                COALESCE(`house_partitions`.`rent_amount`, `houses`.`rent_amount`) AS `rent_amount`,
+                `houses`.`houseID` AS `houseID`,
+                `house_partitions`.`partition_number` AS `partition_number`,
+                `house_partitions`.`partition_status` AS `partition_status`
+            FROM ((`tenants`
+                LEFT JOIN `houses` ON (`tenants`.`houseNumber` = `houses`.`houseID`))
+                LEFT JOIN `house_partitions` ON (`tenants`.`partition_id` = `house_partitions`.`partition_id`))
+        ");
+        return true;
+    } catch (Throwable $e) {
+        return false;
+    }
 }
 
 function ensure_tenant_schema($connection) {
-    ensure_tenant_columns($connection);
-    ensure_tenant_portal_tables($connection);
+    try {
+        ensure_tenant_columns($connection);
+    } catch (Throwable $e) {
+    }
+
+    try {
+        ensure_tenant_portal_tables($connection);
+    } catch (Throwable $e) {
+    }
+
     refresh_tenants_view($connection);
-    ensure_missing_tenant_user_accounts($connection);
+
+    try {
+        ensure_missing_tenant_user_accounts($connection);
+    } catch (Throwable $e) {
+    }
 }
 
 ?>

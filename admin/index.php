@@ -82,7 +82,6 @@
 
 
 
-       
 
 
         <!-- Page Content -->
@@ -114,38 +113,11 @@
 
                 ?>
 
-                <?php if (is_admin_user()) { ?>
-                <div style="width:20em; height:auto; max-height:25em; background-color: transparent;position:fixed; top:4.5em; right: 10px; z-index: 1; padding:1.2em; overflow-x:auto;">
                 <?php
-
-                $sqnotifications=mysqli_query($conn, "SELECT * FROM `transactions` WHERE `seen`='NO' order by `id` desc");
-
-                while ($recc=mysqli_fetch_array($sqnotifications,MYSQLI_BOTH)) 
-                {
-                    $id=$recc['id'];
-                    $actor=$recc['actor'];
-                    $desc=$recc['description'];
-                    $acttime=$recc['time'];
-
-                    echo "<div id='dlt' class='w3-container alert alert-slim w3-card-8 w3-yellow fade in'> 
-                         <h1 onclick=\"deleteNotifications('notifications','$id') \"><a href=\"#\" class=\"close\" data-dismiss=\"alert\" aria-label=\"close\"> 
-                            <img src='../images/Close.png' title='close message'> </a> 
-                         </h1>
-                        <div style='text-align:center; align-self:center; font-size:14px'>
-                            <strong>From $actor ... </strong><br>  
-                            <p class='pcontent'>\"...$desc.\"</p>
-                            <p class='badge badge-info'> $acttime </p>
-                        </div>
-                                                
-                    </div>";
-                }
-
-                
-
+                // The old floating yellow transaction alerts are intentionally disabled.
+                // Transactions are still saved in the database, but we no longer render
+                // them as fixed pop-up cards on the dashboard.
                 ?>
-
-                </div>
-                <?php } ?>
 
                 <?php if (is_tenant_user() && $currentTenant) {
                     $tenantId = (int) $currentTenant['tenantID'];

@@ -3,7 +3,27 @@
 require_once __DIR__ . '/country_options.php';
 
 function ensure_admin_profile_schema($connection) {
+    // Make sure admin.id is a real auto-increment primary key on hosted MySQL too.
+    $idColumnResult = mysqli_query($connection, "SHOW COLUMNS FROM `admin` LIKE 'id'");
+    if ($idColumnResult && mysqli_num_rows($idColumnResult) === 1) {
+        $idColumn = mysqli_fetch_assoc($idColumnResult);
+        $needsPrimaryFix = true;
+        $primaryResult = mysqli_query($connection, "SHOW INDEX FROM `admin` WHERE Key_name = 'PRIMARY'");
+        if ($primaryResult && mysqli_num_rows($primaryResult) > 0) {
+            $needsPrimaryFix = false;
+        }
+
+        if ($needsPrimaryFix) {
+            @mysqli_query($connection, "ALTER TABLE `admin` ADD PRIMARY KEY (`id`)");
+        }
+
+        if (stripos($idColumn['Extra'], 'auto_increment') === false) {
+            @mysqli_query($connection, "ALTER TABLE `admin` MODIFY `id` int(11) NOT NULL AUTO_INCREMENT");
+        }
+    }
+
     $columns = [
+        'tenant_id' => "ALTER TABLE `admin` ADD COLUMN `tenant_id` int(11) DEFAULT NULL AFTER `role`",
         'emirates_id' => "ALTER TABLE `admin` ADD COLUMN `emirates_id` varchar(100) DEFAULT NULL AFTER `tenant_id`",
         'property_address' => "ALTER TABLE `admin` ADD COLUMN `property_address` text DEFAULT NULL AFTER `emirates_id`",
         'property_details' => "ALTER TABLE `admin` ADD COLUMN `property_details` text DEFAULT NULL AFTER `property_address`",
@@ -15,8 +35,13 @@ function ensure_admin_profile_schema($connection) {
     foreach ($columns as $column => $sql) {
         $result = mysqli_query($connection, "SHOW COLUMNS FROM `admin` LIKE '$column'");
         if ($result && mysqli_num_rows($result) === 0) {
-            mysqli_query($connection, $sql);
+            @mysqli_query($connection, $sql);
         }
+    }
+
+    $tenantIdIndex = mysqli_query($connection, "SHOW INDEX FROM `admin` WHERE Key_name = 'tenant_id'");
+    if ($tenantIdIndex && mysqli_num_rows($tenantIdIndex) === 0) {
+        @mysqli_query($connection, "ALTER TABLE `admin` ADD KEY `tenant_id` (`tenant_id`)");
     }
 }
 
@@ -52,4 +77,3 @@ function upload_admin_property_document($file) {
 
     return 'uploads/property_docs/' . $fileName;
 }
-

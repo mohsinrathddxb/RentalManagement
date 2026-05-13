@@ -43,9 +43,16 @@ if (isset($_POST['addPartition'])) {
     mysqli_stmt_bind_param($statement, 'isdsss', $houseId, $partitionNumber, $rentAmount, $status, $description, $facilities);
 
     if (mysqli_stmt_execute($statement)) {
-        $partitionId = mysqli_insert_id($connection);
+        $partitionId = (int) mysqli_insert_id($connection);
 
-        if (!empty($_FILES['house_photos']['name'][0])) {
+        if ($partitionId <= 0) {
+            $idResult = mysqli_query($connection, "SELECT MAX(`partition_id`) AS latest_partition_id FROM `house_partitions`");
+            if ($idResult && ($idRow = mysqli_fetch_assoc($idResult))) {
+                $partitionId = (int) $idRow['latest_partition_id'];
+            }
+        }
+
+        if (!empty($_FILES['house_photos']['name'][0]) && $partitionId > 0) {
             $uploaded = upload_house_photos($connection, $houseId, 'Partitions', $_FILES['house_photos'], $partitionId);
             if ($uploaded === 0) {
                 redirect_partition('partition_added=1&photo_error=invalid');

@@ -9,21 +9,36 @@ function ensure_partition_tables($connection) {
             `rent_amount` double NOT NULL DEFAULT 0,
             `partition_status` varchar(50) NOT NULL DEFAULT 'Vacant',
             `description` text DEFAULT NULL,
+            `facilities` text DEFAULT NULL,
             `date_created` datetime NOT NULL DEFAULT current_timestamp(),
             PRIMARY KEY (`partition_id`),
             KEY `house_id` (`house_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
     ");
 
+    $partitionIdColumn = mysqli_query($connection, "SHOW COLUMNS FROM `house_partitions` LIKE 'partition_id'");
+    if ($partitionIdColumn && mysqli_num_rows($partitionIdColumn) === 1) {
+        $column = mysqli_fetch_assoc($partitionIdColumn);
+
+        $primaryResult = mysqli_query($connection, "SHOW INDEX FROM `house_partitions` WHERE Key_name = 'PRIMARY'");
+        if ($primaryResult && mysqli_num_rows($primaryResult) === 0) {
+            @mysqli_query($connection, "ALTER TABLE `house_partitions` ADD PRIMARY KEY (`partition_id`)");
+        }
+
+        if (stripos($column['Extra'], 'auto_increment') === false) {
+            @mysqli_query($connection, "ALTER TABLE `house_partitions` MODIFY `partition_id` int(11) NOT NULL AUTO_INCREMENT");
+        }
+    }
+
     $facilitiesColumn = mysqli_query($connection, "SHOW COLUMNS FROM `house_partitions` LIKE 'facilities'");
     if ($facilitiesColumn && mysqli_num_rows($facilitiesColumn) === 0) {
-        mysqli_query($connection, "ALTER TABLE `house_partitions` ADD COLUMN `facilities` text DEFAULT NULL AFTER `description`");
+        @mysqli_query($connection, "ALTER TABLE `house_partitions` ADD COLUMN `facilities` text DEFAULT NULL AFTER `description`");
     }
 
     $result = mysqli_query($connection, "SHOW COLUMNS FROM `house_pics` LIKE 'partition_id'");
     if ($result && mysqli_num_rows($result) === 0) {
-        mysqli_query($connection, "ALTER TABLE `house_pics` ADD COLUMN `partition_id` int(11) DEFAULT NULL AFTER `house_id`");
-        mysqli_query($connection, "ALTER TABLE `house_pics` ADD KEY `partition_id` (`partition_id`)");
+        @mysqli_query($connection, "ALTER TABLE `house_pics` ADD COLUMN `partition_id` int(11) DEFAULT NULL AFTER `house_id`");
+        @mysqli_query($connection, "ALTER TABLE `house_pics` ADD KEY `partition_id` (`partition_id`)");
     }
 }
 
@@ -77,7 +92,7 @@ function render_partition_facility_checkboxes($selectedFacilities = '', $inputNa
         $html .= '
             <div class="col-sm-6" style="margin-bottom:8px;">
                 <label class="checkbox-inline" style="padding-left:20px;">
-                    <input type="checkbox" name="'.$inputName.'" value="'.$safeFacility.'"'.$checked.'> '.$safeFacility.'
+                    <input type="checkbox" name="' . $inputName . '" value="' . $safeFacility . '"' . $checked . '> ' . $safeFacility . '
                 </label>
             </div>
         ';
@@ -95,7 +110,7 @@ function render_partition_facilities_badges($storedFacilities) {
 
     $html = '';
     foreach ($facilities as $facility) {
-        $html .= '<span class="label label-success" style="display:inline-block; margin:0 6px 6px 0;">'.htmlspecialchars($facility, ENT_QUOTES, 'UTF-8').'</span>';
+        $html .= '<span class="label label-success" style="display:inline-block; margin:0 6px 6px 0;">' . htmlspecialchars($facility, ENT_QUOTES, 'UTF-8') . '</span>';
     }
 
     return $html;
