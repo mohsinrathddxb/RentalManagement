@@ -1,0 +1,37 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="frameGold" x1="43" y1="30" x2="210" y2="215" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F6E4B2"/>
+      <stop offset="0.36" stop-color="#D4AF63"/>
+      <stop offset="0.7" stop-color="#B7823E"/>
+      <stop offset="1" stop-color="#865623"/>
+    </linearGradient>
+    <linearGradient id="innerGold" x1="86" y1="92" x2="168" y2="173" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFF1CF"/>
+      <stop offset="0.48" stop-color="#D1A861"/>
+      <stop offset="1" stop-color="#9D6934"/>
+    </linearGradient>
+    <linearGradient id="linen" x1="86" y1="106" x2="161" y2="161" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFF7E8"/>
+      <stop offset="1" stop-color="#E7D1A8"/>
+    </linearGradient>
+    <filter id="logoShadow" x="18" y="18" width="220" height="220" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#6A431E" flood-opacity="0.26"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#logoShadow)">
+    <path d="M56 99.5L128 38L199 99.5" stroke="url(#frameGold)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M58 100V200H142" stroke="url(#frameGold)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M198 101V187H162" stroke="url(#frameGold)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M198 101V135L215 149" stroke="url(#frameGold)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <path d="M87 116L128 82L169 116" stroke="url(#frameGold)" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M89 116H167V171H89V116Z" fill="url(#linen)" fill-opacity="0.42" stroke="url(#innerGold)" stroke-width="6" stroke-linejoin="round"/>
+    <path d="M88 141H168V165C168 168.866 164.866 172 161 172H95C91.134 172 88 168.866 88 165V141Z" fill="url(#linen)" stroke="url(#innerGold)" stroke-width="6" stroke-linejoin="round"/>
+    <path d="M98 130H124C130.627 130 136 135.373 136 142V147H98V130Z" fill="url(#linen)" stroke="url(#innerGold)" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M98 116V173" stroke="url(#innerGold)" stroke-width="5" stroke-linecap="round"/>
+    <path d="M159 116V173" stroke="url(#innerGold)" stroke-width="5" stroke-linecap="round"/>
+    <path d="M89 116L128 87L167 116" stroke="#FFF6E2" stroke-opacity="0.52" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>
