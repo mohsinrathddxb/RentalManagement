@@ -18,6 +18,9 @@ $sms_apiKey = "YourAPIKey";
 $sms_partnerID = "YourPartinerID";
 $sms_shortcode = "TextSMS";
 
+// Telegram bot configuration
+$telegram_bot_token = "8712334063:AAGwk3uU-9i4cmO4Xx7zGDAsXZ7B8bN6FIk";
+
 /* DATABASE CONNECTIONS AS DEFINED IN VARIOUS PAGES */
 global $connection, $mysqli, $conn;
 

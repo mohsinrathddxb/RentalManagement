@@ -8,6 +8,7 @@ ob_start();
 require_once "functions/db.php";
 require_once "functions/partition_helpers.php";
 require_once "functions/tenant_helpers.php";
+require_once "functions/telegram_helpers.php";
 require_once "functions/country_options.php";
 require_once "functions/errors.php";
 
@@ -71,6 +72,8 @@ if (is_logged_in_temporary()) {
             $phoneCode = uncrack($tenantRow['phone_code']);
             $phoneLocal = uncrack($tenantRow['phone_local']);
             $prof = is_username($tenantRow['prof']);
+            $telegramUsername = normalize_telegram_username(isset($tenantRow['telegram_username']) ? $tenantRow['telegram_username'] : '');
+            $telegramChatId = normalize_telegram_chat_id(isset($tenantRow['telegram_chat_id']) ? $tenantRow['telegram_chat_id'] : '');
             $tenantAddress = uncrack($tenantRow['tenant_address']);
             $tenantHomeCountryAddress = uncrack($tenantRow['tenant_home_country_address']);
             $tenantCountry = is_username($tenantRow['tenant_country']);
@@ -86,9 +89,9 @@ if (is_logged_in_temporary()) {
             $phone = trim($phoneCode . ' ' . $phoneLocal);
 
             $sq_tenants = "INSERT INTO `tenants`
-                (`houseNumber`,`partition_id`,`tenant_name`,`email`,`ID_number`,`profession`,`phone_number`,`tenant_address`,`tenant_home_country_address`,`tenant_country`,`start_date`,`end_date`,`tenant_status`,`dateAdmitted`)
+                (`houseNumber`,`partition_id`,`tenant_name`,`email`,`ID_number`,`profession`,`phone_number`,`telegram_username`,`telegram_chat_id`,`tenant_address`,`tenant_home_country_address`,`tenant_country`,`start_date`,`end_date`,`tenant_status`,`dateAdmitted`)
                 VALUES
-                ('$houseid','$partitionId','$tname','$temail','$idnum','$prof','$phone','$tenantAddress','$tenantHomeCountryAddress','$tenantCountry','$startDate','$endDate','Active','$dateAdmitted')";
+                ('$houseid','$partitionId','$tname','$temail','$idnum','$prof','$phone','$telegramUsername','$telegramChatId','$tenantAddress','$tenantHomeCountryAddress','$tenantCountry','$startDate','$endDate','Active','$dateAdmitted')";
 
             if ($mysqli->query($sq_tenants)) {
                 $tenantId = (int) $mysqli->insert_id;
@@ -331,6 +334,8 @@ if (is_logged_in_temporary()) {
                         '<div class="form-group"><label>Start Date: *</label><div class="input-group"><div class="input-group-addon"><i class="fa fa-calendar"></i></div><input type="date" name="tenants[' + index + '][start_date]" class="form-control js-start-date" required></div></div>' +
                         '<div class="form-group"><label>Expected End Date:</label><div class="input-group"><div class="input-group-addon"><i class="fa fa-calendar"></i></div><input type="date" name="tenants[' + index + '][end_date]" class="form-control js-end-date"></div><small class="text-muted">Optional</small></div>' +
                         '<div class="form-group"><label>Email: *</label><div class="input-group"><div class="input-group-addon"><i class="fa fa-at"></i></div><input type="email" name="tenants[' + index + '][temail]" class="form-control" placeholder="example@co-accomodation.com" required></div><small class="text-muted">This will be the tenant username for first login.</small></div>' +
+                        '<div class="form-group"><label>Telegram Username:</label><div class="input-group"><div class="input-group-addon"><i class="fa fa-paper-plane"></i></div><input type="text" name="tenants[' + index + '][telegram_username]" class="form-control" placeholder="@username"></div><small class="text-muted">Optional. Save the tenant username for support reference.</small></div>' +
+                        '<div class="form-group"><label>Telegram Chat ID:</label><div class="input-group"><div class="input-group-addon"><i class="fa fa-comment"></i></div><input type="text" name="tenants[' + index + '][telegram_chat_id]" class="form-control" placeholder="Numeric Telegram chat ID"></div><small class="text-muted">Required for automatic Telegram invoice and receipt delivery.</small></div>' +
                         '<div class="form-group"><label>Profession:</label><div class="input-group"><div class="input-group-addon"><i class="fa fa-briefcase"></i></div><input type="text" name="tenants[' + index + '][prof]" class="form-control" placeholder="e.g. Teacher"></div></div>' +
                     '</div>' +
                 '</div>' +

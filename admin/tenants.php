@@ -8,6 +8,7 @@ ob_start();
 require_once "functions/db.php";
 require_once "functions/partition_helpers.php";
 require_once "functions/tenant_helpers.php";
+require_once "functions/telegram_helpers.php";
 require_once "functions/country_options.php";
 
 session_start();
@@ -39,6 +40,8 @@ if (is_logged_in_temporary()) {
             t.`ID_number`,
             t.`profession`,
             t.`phone_number`,
+            t.`telegram_username`,
+            t.`telegram_chat_id`,
             t.`tenant_address`,
             t.`tenant_home_country_address`,
             t.`tenant_country`,
@@ -90,6 +93,20 @@ if (is_logged_in_temporary()) {
 
                     if (isset($_GET["success"]) || isset($_GET["state"]) && $_GET["state"] == 3) {
                         echo '<div class="alert alert-success"><a href="#" class="close" data-dismiss="alert" aria-label="close"></a><strong>DONE!! </strong><p>The new tenant has been added successfully.</p></div>';
+                    } elseif (isset($_GET["telegram_fetched"])) {
+                        echo '<div class="alert alert-success"><a href="#" class="close" data-dismiss="alert" aria-label="close"></a><strong>TELEGRAM READY!! </strong><p>Telegram chat ID was fetched and saved for the tenant.</p></div>';
+                    } elseif (isset($_GET["telegram_test_sent"])) {
+                        echo '<div class="alert alert-success"><a href="#" class="close" data-dismiss="alert" aria-label="close"></a><strong>TEST SENT!! </strong><p>The Telegram test message was delivered to the tenant.</p></div>';
+                    } elseif (isset($_GET["telegram_username_missing"])) {
+                        echo '<div class="alert alert-warning"><a href="#" class="close" data-dismiss="alert" aria-label="close"></a><strong>USERNAME NEEDED!! </strong><p>Please save the tenant Telegram username before fetching the chat ID.</p></div>';
+                    } elseif (isset($_GET["telegram_chat_not_found"])) {
+                        echo '<div class="alert alert-warning"><a href="#" class="close" data-dismiss="alert" aria-label="close"></a><strong>CHAT NOT FOUND!! </strong><p>We could not find a recent Telegram chat for that username. Ask the tenant to open the bot and send a fresh message, then try again.</p></div>';
+                    } elseif (isset($_GET["telegram_chat_missing"])) {
+                        echo '<div class="alert alert-warning"><a href="#" class="close" data-dismiss="alert" aria-label="close"></a><strong>CHAT ID MISSING!! </strong><p>Fetch or save the tenant Telegram chat ID before sending a test message.</p></div>';
+                    } elseif (isset($_GET["telegram_test_failed"])) {
+                        echo '<div class="alert alert-danger"><a href="#" class="close" data-dismiss="alert" aria-label="close"></a><strong>TEST FAILED!! </strong><p>The Telegram bot could not deliver the test message. Please recheck the token and tenant chat ID.</p></div>';
+                    } elseif (isset($_GET["telegram_missing"]) || isset($_GET["telegram_error"])) {
+                        echo '<div class="alert alert-danger"><a href="#" class="close" data-dismiss="alert" aria-label="close"></a><strong>TELEGRAM ERROR!! </strong><p>That Telegram action could not be completed. Please try again.</p></div>';
                     } elseif (isset($_GET["tenant_account_warning"])) {
                         echo '<div class="alert alert-warning"><a href="#" class="close" data-dismiss="alert" aria-label="close"></a><strong>PARTIAL DONE!! </strong><p>Tenant was added, but the tenant login account needs recheck.</p></div>';
                     } elseif (isset($_GET["deleted"])) {
@@ -122,6 +139,7 @@ if (is_logged_in_temporary()) {
                                         <th>EmiratesID / Passport</th>
                                         <th>Profession</th>
                                         <th>Phone Number</th>
+                                        <th>Telegram</th>
                                         <th>Address</th>
                                         <th>Home Country Address</th>
                                         <th>Country</th>
@@ -142,6 +160,7 @@ if (is_logged_in_temporary()) {
                                         <th>EmiratesID / Passport</th>
                                         <th>Profession</th>
                                         <th>Phone Number</th>
+                                        <th>Telegram</th>
                                         <th>Address</th>
                                         <th>Home Country Address</th>
                                         <th>Country</th>
@@ -181,6 +200,20 @@ if (is_logged_in_temporary()) {
                                             <a href="notices.php?tenant_id=' . $row["tenantID"] . '" class="btn btn-info btn-xs" title="Create notice for ' . $row["tenant_name"] . '">
                                                 <i class="fa fa-envelope"></i> Notice
                                             </a>
+                                            <form action="functions/telegram_tenant_actions.php" method="post" style="display:inline-block; margin:0;">
+                                                <input type="hidden" name="tenant_id" value="' . (int) $row["tenantID"] . '">
+                                                <input type="hidden" name="telegram_action" value="fetch_chat_id">
+                                                <button type="submit" class="btn btn-default btn-xs" title="Fetch Telegram chat ID for ' . $row["tenant_name"] . '">
+                                                    <i class="fa fa-download"></i> TG ID
+                                                </button>
+                                            </form>
+                                            <form action="functions/telegram_tenant_actions.php" method="post" style="display:inline-block; margin:0;">
+                                                <input type="hidden" name="tenant_id" value="' . (int) $row["tenantID"] . '">
+                                                <input type="hidden" name="telegram_action" value="send_test">
+                                                <button type="submit" class="btn btn-primary btn-xs" title="Send Telegram test to ' . $row["tenant_name"] . '">
+                                                    <i class="fa fa-paper-plane"></i> TG Test
+                                                </button>
+                                            </form>
                                         </div>
                                     ' : $row["tenant_name"]) . '</td>
                                     <td>' . $row["house_name"] . '</td>
@@ -189,6 +222,11 @@ if (is_logged_in_temporary()) {
                                     <td>' . $row["ID_number"] . '</td>
                                     <td>' . $row["profession"] . '</td>
                                     <td>' . $row["phone_number"] . '</td>
+                                    <td>' . (
+                                        trim((string) $row["telegram_chat_id"]) !== ''
+                                            ? 'Chat ID saved'
+                                            : (trim((string) $row["telegram_username"]) !== '' ? '@' . htmlspecialchars(ltrim((string) $row["telegram_username"], '@'), ENT_QUOTES, 'UTF-8') : '<span class="text-muted">Not set</span>')
+                                    ) . '</td>
                                     <td>' . $row["tenant_address"] . '</td>
                                     <td>' . $row["tenant_home_country_address"] . '</td>
                                     <td>' . $row["tenant_country"] . '</td>
@@ -322,6 +360,23 @@ if (is_logged_in_temporary()) {
                                                                     <input type="email" name="temail" class="form-control" value="' . $row["email"] . '" placeholder="example@co-accomodation.com" required>
                                                                 </div>
                                                                 <small class="text-muted">This stays the tenant username for login.</small>
+                                                            </div>
+
+                                                            <div class="form-group">
+                                                                <label>Telegram Username:</label>
+                                                                <div class="input-group">
+                                                                    <div class="input-group-addon"><i class="fa fa-paper-plane"></i></div>
+                                                                    <input type="text" name="telegram_username" class="form-control" value="' . htmlspecialchars((string) $row["telegram_username"], ENT_QUOTES, 'UTF-8') . '" placeholder="@username">
+                                                                </div>
+                                                            </div>
+
+                                                            <div class="form-group">
+                                                                <label>Telegram Chat ID:</label>
+                                                                <div class="input-group">
+                                                                    <div class="input-group-addon"><i class="fa fa-comment"></i></div>
+                                                                    <input type="text" name="telegram_chat_id" class="form-control" value="' . htmlspecialchars((string) $row["telegram_chat_id"], ENT_QUOTES, 'UTF-8') . '" placeholder="Numeric Telegram chat ID">
+                                                                </div>
+                                                                <small class="text-muted">Needed before the system can send invoice and receipt PDFs through Telegram.</small>
                                                             </div>
 
                                                             <div class="form-group">

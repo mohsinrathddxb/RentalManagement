@@ -9,6 +9,7 @@ ob_start();
 require_once "functions/db.php";
 require_once "functions/tenant_helpers.php";
 require_once "functions/invoice_pdf_helpers.php";
+require_once "functions/telegram_helpers.php";
 require_once "functions/errors.php";
 
 session_start();
@@ -78,9 +79,9 @@ if (is_logged_in_temporary()) {
         $sqlTransactions = "INSERT INTO `transactions` (`actor`, `time`, `description`)
             VALUES ('Admin ($username)', '$timesnap', '$username added payment of ".format_money_amount($amountPaid)." for $safeTenantName, under invoice ID: $safeInvoiceNumber')";
 
-        $noticeMessage = 'A payment of KES ' . format_money_amount($amountPaid) . ' was received for invoice ' . $invoiceNumber . '.';
+        $noticeMessage = 'A payment of AED ' . format_money_amount($amountPaid) . ' was received for invoice ' . $invoiceNumber . '.';
         if ($balanceCents > 0) {
-            $noticeMessage .= ' Remaining amount to pay is KES ' . format_money_amount($balance) . '.';
+            $noticeMessage .= ' Remaining amount to pay is AED ' . format_money_amount($balance) . '.';
         } else {
             $noticeMessage .= ' This invoice is now fully paid.';
         }
@@ -113,15 +114,16 @@ if (is_logged_in_temporary()) {
         if ($state) {
             $mysqli->commit();
 
-            $finalMessage = "Greetings " . $firstName . ", This is a confirmation that your rent payment of KES. " . format_money_amount($amountPaid) . " has been received and updated.";
+            $finalMessage = "Greetings " . $firstName . ", This is a confirmation that your rent payment of AED " . format_money_amount($amountPaid) . " has been received and updated.";
             if ($balanceCents > 0) {
-                $finalMessage .= " Remaining balance to pay is KES. " . format_money_amount($balance) . ".";
+                $finalMessage .= " Remaining balance to pay is AED " . format_money_amount($balance) . ".";
             } else {
                 $finalMessage .= " Your invoice is now fully paid.";
             }
             $finalMessage .= " Thank you.";
 
             @sendSMS($phone, $finalMessage);
+            @send_payment_receipt_to_tenant_telegram($connection, (int) $paymentId, (int) $tenantId);
 
             header("location:payments.php?state=8");
             exit();

@@ -4,6 +4,7 @@
 require_once "db.php";
 require_once "tenant_helpers.php";
 require_once "partition_helpers.php";
+require_once "telegram_helpers.php";
 
 ensure_partition_tables($connection);
 ensure_tenant_schema($connection);
@@ -86,6 +87,8 @@ if (isset($_POST["editTenant"])) {
   $phoneLocal=uncrack($_POST['phone_local']);
   $phone=trim($phoneCode.' '.$phoneLocal);
   $prof=is_username($_POST['prof']);
+  $telegramUsername=normalize_telegram_username(isset($_POST['telegram_username']) ? $_POST['telegram_username'] : '');
+  $telegramChatId=normalize_telegram_chat_id(isset($_POST['telegram_chat_id']) ? $_POST['telegram_chat_id'] : '');
   $tenantAddress=uncrack($_POST['tenant_address']);
   $tenantHomeCountryAddress=uncrack($_POST['tenant_home_country_address']);
   $tenantCountry=is_username($_POST['tenant_country']);
@@ -108,6 +111,8 @@ if (isset($_POST["editTenant"])) {
         `email` = '$temail', 
         `ID_number` = '$idnum', 
         `phone_number` = '$phone', 
+        `telegram_username` = '$telegramUsername',
+        `telegram_chat_id` = '$telegramChatId',
         `profession` = '$prof',
         `tenant_address` = '$tenantAddress',
         `tenant_home_country_address` = '$tenantHomeCountryAddress',

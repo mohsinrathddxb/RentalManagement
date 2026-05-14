@@ -17,6 +17,8 @@ function ensure_tenant_columns($connection) {
 
     $columns = [
         'partition_id' => "ALTER TABLE `tenants` ADD COLUMN `partition_id` int(11) DEFAULT NULL AFTER `houseNumber`",
+        'telegram_username' => "ALTER TABLE `tenants` ADD COLUMN `telegram_username` varchar(100) DEFAULT NULL AFTER `phone_number`",
+        'telegram_chat_id' => "ALTER TABLE `tenants` ADD COLUMN `telegram_chat_id` varchar(50) DEFAULT NULL AFTER `telegram_username`",
         'tenant_address' => "ALTER TABLE `tenants` ADD COLUMN `tenant_address` text DEFAULT NULL AFTER `phone_number`",
         'tenant_home_country_address' => "ALTER TABLE `tenants` ADD COLUMN `tenant_home_country_address` text DEFAULT NULL AFTER `tenant_address`",
         'tenant_country' => "ALTER TABLE `tenants` ADD COLUMN `tenant_country` varchar(100) DEFAULT NULL AFTER `tenant_home_country_address`",
@@ -236,6 +238,8 @@ function refresh_tenants_view($connection) {
                 `tenants`.`ID_number` AS `ID_number`,
                 `tenants`.`profession` AS `profession`,
                 `tenants`.`phone_number` AS `phone_number`,
+                `tenants`.`telegram_username` AS `telegram_username`,
+                `tenants`.`telegram_chat_id` AS `telegram_chat_id`,
                 `tenants`.`tenant_address` AS `tenant_address`,
                 `tenants`.`tenant_home_country_address` AS `tenant_home_country_address`,
                 `tenants`.`tenant_country` AS `tenant_country`,

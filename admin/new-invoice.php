@@ -11,6 +11,7 @@ ob_start();
 require_once "functions/db.php";
 require_once "functions/tenant_helpers.php";
 require_once "functions/invoice_pdf_helpers.php";
+require_once "functions/telegram_helpers.php";
 require_once "functions/errors.php";
 
 session_start();
@@ -94,8 +95,9 @@ if (is_logged_in_temporary()) {
             if ($status) {
                 $mysqli->commit();
 
-                $finalmessage = "Greetings ".$firstName.", This is a reminder that invoice ".$invoiceid." for ".$invoiceMonth." has been issued. Total due is KES ".format_money_amount($amountDue)." by date ".$invoiceDueDate.".";
+                $finalmessage = "Greetings ".$firstName.", This is a reminder that invoice ".$invoiceid." for ".$invoiceMonth." has been issued. Total due is AED ".format_money_amount($amountDue)." by date ".$invoiceDueDate.".";
                 @sendSMS($phone, $finalmessage);
+                @send_invoice_to_tenant_telegram($connection, $invoiceid, (int) $tenantId);
 
                 header('location:invoices.php?state=5');
                 exit();

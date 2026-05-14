@@ -94,11 +94,7 @@ class SimplePdfDocument {
         );
     }
 
-    public function output($filename) {
-        if (headers_sent()) {
-            return false;
-        }
-
+    public function render() {
         $objects = [];
         $objects[1] = "<< /Type /Catalog /Pages 2 0 R >>";
         $objects[3] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>";
@@ -158,6 +154,16 @@ class SimplePdfDocument {
         $pdf .= "startxref\n";
         $pdf .= $xrefOffset . "\n";
         $pdf .= "%%EOF";
+
+        return $pdf;
+    }
+
+    public function output($filename) {
+        if (headers_sent()) {
+            return false;
+        }
+
+        $pdf = $this->render();
 
         header('Content-Type: application/pdf');
         header('Content-Disposition: attachment; filename="' . $filename . '"');
@@ -268,6 +274,8 @@ function build_invoice_document_data($connection, $invoiceNumber, $tenantId = 0)
             t.`tenant_name`,
             t.`phone_number`,
             t.`email`,
+            t.`telegram_username`,
+            t.`telegram_chat_id`,
             t.`tenant_address`,
             t.`tenant_home_country_address`,
             t.`tenant_country`,
@@ -319,6 +327,8 @@ function build_payment_receipt_data($connection, $paymentId, $tenantId = 0) {
             t.`tenant_name`,
             t.`phone_number`,
             t.`email`,
+            t.`telegram_username`,
+            t.`telegram_chat_id`,
             t.`tenant_address`,
             t.`tenant_home_country_address`,
             t.`tenant_country`,
@@ -405,7 +415,7 @@ function pdf_draw_text_block($pdf, $x, $y, $lines, $size = 11, $font = 'regular'
     return $currentY;
 }
 
-function render_invoice_pdf($invoiceRow) {
+function build_invoice_pdf_document($invoiceRow) {
     $pdf = new SimplePdfDocument();
     $pdf->addPage();
 
@@ -518,10 +528,20 @@ function render_invoice_pdf($invoiceRow) {
         pdf_draw_text_block($pdf, $left, $footerTop + 38, $commentLines, 10, 'regular', $darkGray, 13);
     }
 
-    $pdf->output('invoice-' . $invoiceRow['invoiceNumber'] . '.pdf');
+    return $pdf;
 }
 
-function render_payment_receipt_pdf($paymentRow) {
+function render_invoice_pdf($invoiceRow) {
+    $pdf = build_invoice_pdf_document($invoiceRow);
+    return $pdf->output('invoice-' . $invoiceRow['invoiceNumber'] . '.pdf');
+}
+
+function generate_invoice_pdf_binary($invoiceRow) {
+    $pdf = build_invoice_pdf_document($invoiceRow);
+    return $pdf->render();
+}
+
+function build_payment_receipt_pdf_document($paymentRow) {
     $pdf = new SimplePdfDocument();
     $pdf->addPage();
 
@@ -632,5 +652,15 @@ function render_payment_receipt_pdf($paymentRow) {
         pdf_draw_text_block($pdf, $left, $footerTop + 38, $commentLines, 10, 'regular', $darkGray, 13);
     }
 
-    $pdf->output('payment-receipt-' . $paymentRow['paymentID'] . '.pdf');
+    return $pdf;
+}
+
+function render_payment_receipt_pdf($paymentRow) {
+    $pdf = build_payment_receipt_pdf_document($paymentRow);
+    return $pdf->output('payment-receipt-' . $paymentRow['paymentID'] . '.pdf');
+}
+
+function generate_payment_receipt_pdf_binary($paymentRow) {
+    $pdf = build_payment_receipt_pdf_document($paymentRow);
+    return $pdf->render();
 }
