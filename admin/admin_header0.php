@@ -37,7 +37,6 @@
     <link href="css/style.css" rel="stylesheet">
     <!-- color CSS -->
     <link href="css/colors/blue.css" id="theme" rel="stylesheet">
-    <link href="css/luxury-theme.css" rel="stylesheet">
     <style type="text/css">
         #dlt{
             /*error message div*/
@@ -65,7 +64,7 @@
         <!-- Navigation -->
         <nav class="navbar navbar-default navbar-static-top m-b-0">
             <div class="navbar-header"> <a class="navbar-toggle hidden-sm hidden-md hidden-lg " href="javascript:void(0)" data-toggle="collapse" data-target=".navbar-collapse"><i class="ti-menu"></i></a>
-                <div class="top-left-part"><a class="logo luxury-logo" href="index.php"><b><img src="../plugins/images/co-living-space-mark.svg" style="width: 44px; height: 44px;" alt="Co-Living Space" /></b><span class="hidden-xs"><strong>Co-Living Space</strong></span></a></div>
+                <div class="top-left-part"><a class="logo" href="index.php"><b><img src="../plugins/images/icon.png" style="width: 30px; height: 30px;" alt="home" /></b><span class="hidden-xs"><b>Co- Accomodation</b></span></a></div>
                 <ul class="nav navbar-top-links navbar-left hidden-xs">
                     <li><a href="javascript:void(0)" class="open-close hidden-xs waves-effect waves-light"><i class="icon-arrow-left-circle ti-menu"></i></a></li>
                     <li>
