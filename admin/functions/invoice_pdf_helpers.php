@@ -232,6 +232,38 @@ function ensure_invoice_pdf_columns($connection) {
     ");
 }
 
+function pdf_mobile_token_secret() {
+    global $telegram_bot_token, $database;
+
+    return hash('sha256', (string) $telegram_bot_token . '|' . (string) $database . '|co-living-space-pdf');
+}
+
+function pdf_mobile_token($email, $type, $documentId) {
+    $email = strtolower(trim((string) $email));
+    $type = strtolower(trim((string) $type));
+    $documentId = trim((string) $documentId);
+
+    if ($email === '' || $type === '' || $documentId === '') {
+        return '';
+    }
+
+    return hash_hmac('sha256', $email . '|' . $type . '|' . $documentId, pdf_mobile_token_secret());
+}
+
+function pdf_mobile_query_string($email, $type, $documentId) {
+    $token = pdf_mobile_token($email, $type, $documentId);
+    if ($token === '') {
+        return '';
+    }
+
+    return '&mobile_user=' . rawurlencode(strtolower(trim((string) $email))) . '&mobile_token=' . rawurlencode($token);
+}
+
+function pdf_mobile_token_is_valid($email, $type, $documentId, $token) {
+    $expected = pdf_mobile_token($email, $type, $documentId);
+    return $expected !== '' && hash_equals($expected, (string) $token);
+}
+
 function get_invoice_line_items($invoiceRow) {
     $lineItems = [];
 
@@ -279,9 +311,9 @@ function build_invoice_document_data($connection, $invoiceNumber, $tenantId = 0)
             t.`tenant_address`,
             t.`tenant_home_country_address`,
             t.`tenant_country`,
-            tv.`house_name`,
-            tv.`partition_number`,
-            COALESCE(tv.`rent_amount`, i.`rent_amount`) AS `current_rent_amount`,
+            h.`house_name`,
+            hp.`partition_number`,
+            COALESCE(hp.`rent_amount`, h.`rent_amount`, i.`rent_amount`) AS `current_rent_amount`,
             (
                 SELECT COALESCE(SUM(p.`amountPaid`), 0)
                 FROM `payments` p
@@ -294,7 +326,8 @@ function build_invoice_document_data($connection, $invoiceNumber, $tenantId = 0)
             ) AS `latest_payment_id`
         FROM `invoices` i
         LEFT JOIN `tenants` t ON i.`tenantID` = t.`tenantID`
-        LEFT JOIN `tenantsView` tv ON i.`tenantID` = tv.`tenantID`
+        LEFT JOIN `houses` h ON t.`houseNumber` = h.`houseID`
+        LEFT JOIN `house_partitions` hp ON t.`partition_id` = hp.`partition_id`
         WHERE i.`invoiceNumber` = '$invoiceNumber' $tenantWhere
         LIMIT 1
     ";
@@ -332,8 +365,8 @@ function build_payment_receipt_data($connection, $paymentId, $tenantId = 0) {
             t.`tenant_address`,
             t.`tenant_home_country_address`,
             t.`tenant_country`,
-            tv.`house_name`,
-            tv.`partition_number`,
+            h.`house_name`,
+            hp.`partition_number`,
             (
                 SELECT COALESCE(SUM(p2.`amountPaid`), 0)
                 FROM `payments` p2
@@ -349,7 +382,8 @@ function build_payment_receipt_data($connection, $paymentId, $tenantId = 0) {
         FROM `payments` p
         LEFT JOIN `invoices` i ON p.`invoiceNumber` = i.`invoiceNumber`
         LEFT JOIN `tenants` t ON p.`tenantID` = t.`tenantID`
-        LEFT JOIN `tenantsView` tv ON p.`tenantID` = tv.`tenantID`
+        LEFT JOIN `houses` h ON t.`houseNumber` = h.`houseID`
+        LEFT JOIN `house_partitions` hp ON t.`partition_id` = hp.`partition_id`
         WHERE p.`paymentID` = '$paymentId' $tenantWhere
         LIMIT 1
     ";
@@ -415,6 +449,47 @@ function pdf_draw_text_block($pdf, $x, $y, $lines, $size = 11, $font = 'regular'
     return $currentY;
 }
 
+function pdf_draw_brand_logo($pdf, $x, $y, $scale = 0.42) {
+    $gold = [200, 164, 73];
+    $goldLight = [238, 204, 110];
+    $goldDark = [162, 124, 42];
+    $linen = [250, 244, 231];
+
+    $sx = function ($value) use ($x, $scale) {
+        return $x + ($value * $scale);
+    };
+    $sy = function ($value) use ($y, $scale) {
+        return $y + ($value * $scale);
+    };
+    $sw = function ($value) use ($scale) {
+        return $value * $scale;
+    };
+
+    $pdf->line($sx(84), $sy(126), $sx(188), $sy(24), $sw(18), $gold);
+    $pdf->line($sx(188), $sy(24), $sx(296), $sy(126), $sw(18), $gold);
+    $pdf->line($sx(95), $sy(126), $sx(188), $sy(36), $sw(5), $goldLight);
+    $pdf->line($sx(188), $sy(36), $sx(286), $sy(126), $sw(5), $goldLight);
+    $pdf->line($sx(72), $sy(134), $sx(88), $sy(134), $sw(12), $gold);
+    $pdf->line($sx(288), $sy(134), $sx(306), $sy(134), $sw(12), $gold);
+    $pdf->line($sx(84), $sy(134), $sx(84), $sy(266), $sw(18), $gold);
+    $pdf->line($sx(84), $sy(266), $sx(202), $sy(266), $sw(18), $goldDark);
+    $pdf->line($sx(296), $sy(134), $sx(296), $sy(246), $sw(18), $gold);
+    $pdf->line($sx(296), $sy(246), $sx(248), $sy(246), $sw(18), $goldDark);
+    $pdf->line($sx(296), $sy(154), $sx(324), $sy(184), $sw(18), $gold);
+
+    $pdf->line($sx(130), $sy(176), $sx(188), $sy(118), $sw(7), $goldLight);
+    $pdf->line($sx(188), $sy(118), $sx(248), $sy(176), $sw(7), $gold);
+    $pdf->line($sx(134), $sy(176), $sx(244), $sy(176), $sw(5), $goldDark);
+    $pdf->line($sx(136), $sy(176), $sx(136), $sy(248), $sw(5), $goldLight);
+    $pdf->line($sx(244), $sy(176), $sx(244), $sy(248), $sw(5), $goldDark);
+    $pdf->rect($sx(140), $sy(204), $sw(104), $sw(44), 'B', $goldDark, $linen, $sw(2));
+    $pdf->rect($sx(142), $sy(226), $sw(102), $sw(34), 'B', $goldDark, [236, 220, 184], $sw(2));
+    $pdf->rect($sx(146), $sy(208), $sw(48), $sw(22), 'B', $gold, [255, 248, 231], $sw(1.5));
+
+    $pdf->text(pdf_center_text_x('CO-LIVING SPACE', 13, $sx(0), $sw(380)), $sy(338), 'CO-LIVING SPACE', 13, 'bold', $gold);
+    $pdf->line($sx(166), $sy(360), $sx(214), $sy(360), $sw(1.2), $gold);
+}
+
 function build_invoice_pdf_document($invoiceRow) {
     $pdf = new SimplePdfDocument();
     $pdf->addPage();
@@ -423,13 +498,12 @@ function build_invoice_pdf_document($invoiceRow) {
     $top = 56;
     $pageWidth = 595.28;
     $right = $pageWidth - 48;
-    $brandBlue = [29, 97, 177];
-    $softGray = [235, 238, 242];
+    $brandBlue = [7, 26, 45];
+    $brandGold = [200, 164, 73];
+    $softGray = [246, 242, 232];
     $darkGray = [76, 84, 96];
     $logoBoxX = $right - 160;
-    $logoBoxY = $top - 6;
-    $logoBoxWidth = 140;
-    $logoBoxHeight = 66;
+    $logoBoxY = $top - 18;
 
     $tenantAddressLines = [];
     if (!empty($invoiceRow['tenant_name'])) {
@@ -454,12 +528,10 @@ function build_invoice_pdf_document($invoiceRow) {
     $totalPaid = isset($invoiceRow['total_paid']) ? (float) $invoiceRow['total_paid'] : 0;
     $creditApplied = isset($invoiceRow['credit_applied']) ? (float) $invoiceRow['credit_applied'] : 0;
 
-    $pdf->text($left, $top, 'INVOICE', 24, 'bold');
-    $pdf->rect($logoBoxX, $logoBoxY, $logoBoxWidth, $logoBoxHeight, 'S', $brandBlue, [255, 255, 255], 1.2);
-    $pdf->text(pdf_center_text_x('CO-LIVING', 18, $logoBoxX, $logoBoxWidth), $top + 12, 'CO-LIVING', 18, 'bold', $brandBlue);
-    $pdf->text(pdf_center_text_x('SPACE', 18, $logoBoxX, $logoBoxWidth), $top + 38, 'SPACE', 18, 'bold', $brandBlue);
+    $pdf->text($left, $top, 'INVOICE', 24, 'bold', $brandBlue);
+    pdf_draw_brand_logo($pdf, $logoBoxX, $logoBoxY, 0.32);
 
-    $pdf->text($left, $top + 60, 'Co-Living Space Rental Management', 11, 'bold', $darkGray);
+    $pdf->text($left, $top + 60, 'Co-Living Space Rental Management', 11, 'bold', $brandGold);
     $pdf->text($left, $top + 76, 'Generated from your local rental management system', 10, 'regular', $darkGray);
 
     $pdf->text($left, $top + 120, 'BILL TO', 11, 'bold');
@@ -478,11 +550,11 @@ function build_invoice_pdf_document($invoiceRow) {
 
     $tableTop = $top + 230;
     $colX = [$left, 285, 395, 500];
-    $pdf->rect($left - 6, $tableTop - 16, 500, 26, 'B', [220, 223, 228], $softGray, 0.8);
-    $pdf->text($left + 4, $tableTop, 'DESCRIPTION', 10, 'bold');
-    $pdf->text($colX[1] - 2, $tableTop, 'QTY', 10, 'bold');
-    $pdf->text($colX[2] - 2, $tableTop, 'UNIT PRICE', 10, 'bold');
-    $pdf->text($colX[3] - 2, $tableTop, 'AMOUNT', 10, 'bold');
+    $pdf->rect($left - 6, $tableTop - 16, 500, 26, 'B', $brandBlue, $brandBlue, 0.8);
+    $pdf->text($left + 4, $tableTop, 'DESCRIPTION', 10, 'bold', [246, 242, 232]);
+    $pdf->text($colX[1] - 2, $tableTop, 'QTY', 10, 'bold', [246, 242, 232]);
+    $pdf->text($colX[2] - 2, $tableTop, 'UNIT PRICE', 10, 'bold', [246, 242, 232]);
+    $pdf->text($colX[3] - 2, $tableTop, 'AMOUNT', 10, 'bold', [246, 242, 232]);
 
     $rowY = $tableTop + 28;
     foreach ($lineItems as $item) {
@@ -515,7 +587,7 @@ function build_invoice_pdf_document($invoiceRow) {
         $summaryFooterTop = $summaryTop + 56;
     }
 
-    $pdf->rect($summaryX, $summaryFooterTop, $summaryWidth, 34, 'B', [0, 0, 0], [0, 0, 0], 0.8);
+    $pdf->rect($summaryX, $summaryFooterTop, $summaryWidth, 34, 'B', $brandBlue, $brandBlue, 0.8);
     $pdf->text($summaryX + 10, $summaryFooterTop + 22, 'TOTAL DUE', 11, 'bold', [255, 255, 255]);
     $pdf->text($summaryValueX, $summaryFooterTop + 22, pdf_money($amountDue), 11, 'bold', [255, 255, 255]);
 
@@ -549,13 +621,12 @@ function build_payment_receipt_pdf_document($paymentRow) {
     $top = 56;
     $pageWidth = 595.28;
     $right = $pageWidth - 48;
-    $brandBlue = [29, 97, 177];
-    $softGray = [235, 238, 242];
+    $brandBlue = [7, 26, 45];
+    $brandGold = [200, 164, 73];
+    $softGray = [246, 242, 232];
     $darkGray = [76, 84, 96];
     $logoBoxX = $right - 160;
-    $logoBoxY = $top - 6;
-    $logoBoxWidth = 140;
-    $logoBoxHeight = 66;
+    $logoBoxY = $top - 18;
 
     $tenantAddressLines = [];
     if (!empty($paymentRow['tenant_name'])) {
@@ -581,12 +652,10 @@ function build_payment_receipt_pdf_document($paymentRow) {
     $paidBefore = isset($paymentRow['paid_before']) ? (float) $paymentRow['paid_before'] : 0;
     $paidThrough = isset($paymentRow['paid_through_this_receipt']) ? (float) $paymentRow['paid_through_this_receipt'] : $paymentAmount;
 
-    $pdf->text($left, $top, 'PAYMENT RECEIPT', 24, 'bold');
-    $pdf->rect($logoBoxX, $logoBoxY, $logoBoxWidth, $logoBoxHeight, 'S', $brandBlue, [255, 255, 255], 1.2);
-    $pdf->text(pdf_center_text_x('CO-LIVING', 18, $logoBoxX, $logoBoxWidth), $top + 12, 'CO-LIVING', 18, 'bold', $brandBlue);
-    $pdf->text(pdf_center_text_x('SPACE', 18, $logoBoxX, $logoBoxWidth), $top + 38, 'SPACE', 18, 'bold', $brandBlue);
+    $pdf->text($left, $top, 'PAYMENT RECEIPT', 24, 'bold', $brandBlue);
+    pdf_draw_brand_logo($pdf, $logoBoxX, $logoBoxY, 0.32);
 
-    $pdf->text($left, $top + 60, 'Receipt for rental payment received', 11, 'bold', $darkGray);
+    $pdf->text($left, $top + 60, 'Receipt for rental payment received', 11, 'bold', $brandGold);
     $pdf->text($left, $top + 76, 'Generated from your local rental management system', 10, 'regular', $darkGray);
 
     $pdf->text($left, $top + 120, 'RECEIVED FROM', 11, 'bold');
@@ -605,11 +674,11 @@ function build_payment_receipt_pdf_document($paymentRow) {
 
     $tableTop = $top + 230;
     $colX = [$left, 285, 395, 500];
-    $pdf->rect($left - 6, $tableTop - 16, 500, 26, 'B', [220, 223, 228], $softGray, 0.8);
-    $pdf->text($left + 4, $tableTop, 'DESCRIPTION', 10, 'bold');
-    $pdf->text($colX[1] - 2, $tableTop, 'QTY', 10, 'bold');
-    $pdf->text($colX[2] - 2, $tableTop, 'UNIT PRICE', 10, 'bold');
-    $pdf->text($colX[3] - 2, $tableTop, 'AMOUNT', 10, 'bold');
+    $pdf->rect($left - 6, $tableTop - 16, 500, 26, 'B', $brandBlue, $brandBlue, 0.8);
+    $pdf->text($left + 4, $tableTop, 'DESCRIPTION', 10, 'bold', [246, 242, 232]);
+    $pdf->text($colX[1] - 2, $tableTop, 'QTY', 10, 'bold', [246, 242, 232]);
+    $pdf->text($colX[2] - 2, $tableTop, 'UNIT PRICE', 10, 'bold', [246, 242, 232]);
+    $pdf->text($colX[3] - 2, $tableTop, 'AMOUNT', 10, 'bold', [246, 242, 232]);
 
     $rowY = $tableTop + 28;
     foreach ($lineItems as $item) {
@@ -630,7 +699,7 @@ function build_payment_receipt_pdf_document($paymentRow) {
         ['label' => 'PAID BEFORE', 'value' => pdf_money($paidBefore), 'fill' => [250, 250, 250], 'textColor' => [0, 0, 0]],
         ['label' => 'THIS PAYMENT', 'value' => pdf_money($paymentAmount), 'fill' => [250, 250, 250], 'textColor' => [0, 0, 0]],
         ['label' => 'PAID TO DATE', 'value' => pdf_money($paidThrough), 'fill' => [250, 250, 250], 'textColor' => [0, 0, 0]],
-        ['label' => 'BALANCE DUE', 'value' => pdf_money($remainingBalance), 'fill' => [0, 0, 0], 'textColor' => [255, 255, 255]]
+        ['label' => 'BALANCE DUE', 'value' => pdf_money($remainingBalance), 'fill' => $brandBlue, 'textColor' => [255, 255, 255]]
     ];
 
     $rowIndex = 0;

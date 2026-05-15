@@ -1,0 +1,43 @@
+<svg width="560" height="620" viewBox="0 0 560 620" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Co-Living Space</title>
+  <desc id="desc">Gold co-living house mark with bed and Co-Living Space wordmark.</desc>
+  <defs>
+    <linearGradient id="goldFrame" x1="104" y1="42" x2="458" y2="432" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFF3C8"/>
+      <stop offset="0.24" stop-color="#D9B75A"/>
+      <stop offset="0.5" stop-color="#C8A449"/>
+      <stop offset="0.78" stop-color="#A06F22"/>
+      <stop offset="1" stop-color="#F2D992"/>
+    </linearGradient>
+    <linearGradient id="softGold" x1="165" y1="150" x2="360" y2="350" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFF8E9"/>
+      <stop offset="0.52" stop-color="#E6C878"/>
+      <stop offset="1" stop-color="#9A6A25"/>
+    </linearGradient>
+    <linearGradient id="linen" x1="174" y1="206" x2="347" y2="330" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFF8ED"/>
+      <stop offset="1" stop-color="#DCC397"/>
+    </linearGradient>
+    <filter id="shadow" x="54" y="18" width="452" height="480" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="14" stdDeviation="12" flood-color="#4D310C" flood-opacity="0.26"/>
+    </filter>
+  </defs>
+  <rect width="560" height="620" fill="transparent"/>
+  <g filter="url(#shadow)">
+    <path d="M104 226L281 66L455 226" stroke="url(#goldFrame)" stroke-width="40" stroke-linecap="square" stroke-linejoin="miter"/>
+    <path d="M104 226V426H289" stroke="url(#goldFrame)" stroke-width="40" stroke-linecap="square" stroke-linejoin="miter"/>
+    <path d="M455 226V399H382" stroke="url(#goldFrame)" stroke-width="40" stroke-linecap="square" stroke-linejoin="miter"/>
+    <path d="M455 226V291L495 325" stroke="url(#goldFrame)" stroke-width="40" stroke-linecap="square" stroke-linejoin="miter"/>
+    <path d="M169 276L280 178L389 276" stroke="url(#softGold)" stroke-width="19" stroke-linecap="square" stroke-linejoin="miter"/>
+    <path d="M174 275H385V366H174V275Z" fill="url(#linen)" stroke="url(#softGold)" stroke-width="10"/>
+    <path d="M176 325H385V379C385 388.389 377.389 396 368 396H193C183.611 396 176 388.389 176 379V325Z" fill="url(#linen)" stroke="url(#softGold)" stroke-width="10"/>
+    <path d="M196 303H253C269.569 303 283 316.431 283 333V344H196V303Z" fill="#FFF7E8" stroke="url(#softGold)" stroke-width="7"/>
+    <path d="M174 275L280 191L385 275" stroke="#FFF4D5" stroke-opacity="0.72" stroke-width="5" stroke-linecap="square"/>
+    <path d="M104 226L281 66" stroke="#FFF2C0" stroke-opacity="0.42" stroke-width="7"/>
+    <path d="M285 71L455 226" stroke="#7D5019" stroke-opacity="0.24" stroke-width="6"/>
+  </g>
+  <g fill="#C8A449" stroke="#071A2D" stroke-opacity="0.25" stroke-width="1.2">
+    <text x="280" y="528" text-anchor="middle" font-family="Montserrat, Poppins, Arial, sans-serif" font-size="42" font-weight="500" letter-spacing="10">CO-LIVING SPACE</text>
+  </g>
+  <line x1="238" y1="574" x2="322" y2="574" stroke="#C8A449" stroke-width="4"/>
+</svg>

@@ -157,10 +157,13 @@ if (is_logged_in_temporary()) {
                                     $statusLabel = '<span class="label label-danger">'.htmlspecialchars($row["status"], ENT_QUOTES, 'UTF-8').'</span>';
                                 }
 
-                                $invoiceLink = '<a class="btn btn-xs btn-info" href="invoice-pdf.php?invoice='.urlencode($row["invoiceNumber"]).'">Invoice PDF</a>';
+                                $pdfMobileEmail = isset($_SESSION['email']) ? $_SESSION['email'] : '';
+                                $invoiceMobileQuery = pdf_mobile_query_string($pdfMobileEmail, 'invoice', $row["invoiceNumber"]);
+                                $invoiceLink = '<a class="btn btn-xs btn-info" href="invoice-pdf.php?invoice='.urlencode($row["invoiceNumber"]).$invoiceMobileQuery.'">Invoice PDF</a>';
                                 $receiptLink = '';
                                 if (!empty($row["latestPaymentID"])) {
-                                    $receiptLink = ' <a class="btn btn-xs btn-success" href="payment-receipt-pdf.php?payment='.(int) $row["latestPaymentID"].'">Latest Receipt</a>';
+                                    $receiptMobileQuery = pdf_mobile_query_string($pdfMobileEmail, 'receipt', (int) $row["latestPaymentID"]);
+                                    $receiptLink = ' <a class="btn btn-xs btn-success" href="payment-receipt-pdf.php?payment='.(int) $row["latestPaymentID"].$receiptMobileQuery.'">Latest Receipt</a>';
                                 }
 
                                 echo '

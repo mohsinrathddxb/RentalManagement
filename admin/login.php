@@ -213,7 +213,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="">
     <meta name="author" content="">
-    <link rel="icon" type="image/png" sizes="16x16" href="../plugins/images/icon.png">
+    <link rel="icon" type="image/svg+xml" href="../plugins/images/co-living-space-logo.svg">
     <title>Company Admin</title>
     <!-- Bootstrap Core CSS -->
     <link href="bootstrap/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -224,6 +224,7 @@
     <link href="css/style.css" rel="stylesheet">
     <!-- color CSS -->
     <link href="css/colors/blue.css" id="theme" rel="stylesheet">
+    <link href="css/luxury-theme.css" rel="stylesheet">
     <!-- HTML5 Shim and Respond.js IE8 support of HTML5 elements and media queries -->
     <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
     <!--[if lt IE 9]>
@@ -240,6 +241,9 @@
     <section id="wrapper" class="login-register">
         <div class="login-box">
             <div class="white-box">
+                <div class="login-brand">
+                    <img src="../plugins/images/co-living-space-logo.svg" alt="Co-Living Space">
+                </div>
                 <form class="form-horizontal form-material" id="loginform" action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]);?>" method="post">
                     <h3 class="box-title m-b-20">Sign In</h3>
                     <?php if ($success_msg !== "") { ?><p style="color:green;"><?php echo $success_msg; ?></p><?php } ?>

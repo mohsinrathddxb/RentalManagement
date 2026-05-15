@@ -219,16 +219,37 @@ function get_logged_in_tenant_record()
         return null;
     }
 
-    $queries = [
-        "SELECT * FROM `tenantsView` WHERE `email`='$email' AND `tenant_status`='Active' ORDER BY `tenantID` DESC LIMIT 1",
-        "SELECT * FROM `tenants` WHERE `email`='$email' AND `tenant_status`='Active' ORDER BY `tenantID` DESC LIMIT 1"
-    ];
+    $sql = "
+        SELECT
+            t.*,
+            h.`house_name`,
+            h.`number_of_rooms`,
+            h.`house_status`,
+            h.`rent_amount` AS `house_rent_amount`,
+            h.`houseID`,
+            hp.`partition_number`,
+            hp.`partition_status`,
+            hp.`rent_amount` AS `partition_rent_amount`,
+            COALESCE(hp.`rent_amount`, h.`rent_amount`) AS `rent_amount`
+        FROM `tenants` t
+        LEFT JOIN `houses` h ON t.`houseNumber` = h.`houseID`
+        LEFT JOIN `house_partitions` hp ON t.`partition_id` = hp.`partition_id`
+        WHERE t.`email`='$email' AND t.`tenant_status`='Active'
+        ORDER BY t.`tenantID` DESC
+        LIMIT 1
+    ";
 
-    foreach ($queries as $sql) {
-        $result = @mysqli_query($connection, $sql);
-        if ($result && mysqli_num_rows($result) === 1) {
-            return mysqli_fetch_assoc($result);
-        }
+    $result = @mysqli_query($connection, $sql);
+    if ($result && mysqli_num_rows($result) === 1) {
+        return mysqli_fetch_assoc($result);
+    }
+
+    $fallbackResult = @mysqli_query(
+        $connection,
+        "SELECT * FROM `tenants` WHERE `email`='$email' AND `tenant_status`='Active' ORDER BY `tenantID` DESC LIMIT 1"
+    );
+    if ($fallbackResult && mysqli_num_rows($fallbackResult) === 1) {
+        return mysqli_fetch_assoc($fallbackResult);
     }
 
     return null;

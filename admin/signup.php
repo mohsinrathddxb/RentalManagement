@@ -80,13 +80,14 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="">
     <meta name="author" content="">
-    <link rel="icon" type="image/png" sizes="16x16" href="../plugins/images/icon.png">
+    <link rel="icon" type="image/svg+xml" href="../plugins/images/co-living-space-logo.svg">
     <title>Co- Accomodation Admin Sign Up</title>
     <link href="bootstrap/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="../plugins/bower_components/bootstrap-extension/css/bootstrap-extension.css" rel="stylesheet">
     <link href="css/animate.css" rel="stylesheet">
     <link href="css/style.css" rel="stylesheet">
     <link href="css/colors/blue.css" id="theme" rel="stylesheet">
+    <link href="css/luxury-theme.css" rel="stylesheet">
     <style>
         html, body {
             min-height: 100%;
@@ -156,6 +157,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     <section id="wrapper" class="login-register">
         <div class="login-box">
             <div class="white-box">
+                <div class="login-brand">
+                    <img src="../plugins/images/co-living-space-logo.svg" alt="Co-Living Space">
+                </div>
                 <form class="form-horizontal form-material" action="signup.php" method="post" enctype="multipart/form-data">
                     <h3 class="box-title m-b-20">Admin Sign Up</h3>
                     <p class="text-muted m-b-20">Create your admin account and then continue to login.</p>

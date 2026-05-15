@@ -258,12 +258,16 @@
                                                 $photoCards = '<div class="col-md-12"><i style="color:brown;">No bed or partition photos uploaded yet.</i></div>';
                                             }
                                             $photoBadge = $photoCount > 0
-                                                ? '<a href="#" class="btn btn-info btn-xs" data-toggle="modal" data-target="#responsive-modal_photos'.$i.'" title="View uploaded photos"><i class="fa fa-image"></i> Image ('.$photoCount.')</a>'
+                                                ? '<a href="#" class="btn btn-info btn-xs js-photo-gallery" data-gallery-target="#responsive-modal_photos'.$i.'" title="View uploaded photos full screen"><i class="fa fa-image"></i> Image ('.$photoCount.')</a>'
                                                 : '<span class="label label-default">No Image</span>';
-                                            $partitionCount = count_house_partitions($connection, $i);
-                                            $partitionBadge = '<a href="#" class="label label-info" data-toggle="modal" data-target="#responsive-modal_partitions'.$i.'" title="View house partitions">'.$partitionCount.'</a>';
+                                            $partitionCounts = get_house_partition_counts($connection, $i);
+                                            $partitionCount = $partitionCounts['total'];
+                                            $availablePartitionCount = $partitionCounts['available'];
+                                            $partitionBadgeText = $availablePartitionCount.'/'.$partitionCount;
+                                            $partitionBadge = '<a href="#" class="label label-info" data-toggle="modal" data-target="#responsive-modal_partitions'.$i.'" title="'.$availablePartitionCount.' partition(s) available out of '.$partitionCount.' total">'.$partitionBadgeText.'</a>';
                                             $partitionRows = get_house_partitions($connection, $i);
                                             $partitionCards = '';
+                                            $availablePartitionCards = '';
 
                                             if ($partitionRows && mysqli_num_rows($partitionRows) > 0) {
                                                 while ($partition = mysqli_fetch_assoc($partitionRows)) {
@@ -378,7 +382,7 @@
                                                         </form>
                                                     ' : '';
 
-                                                    $partitionCards .= '
+                                                    $partitionCardHtml = '
                                                         <div class="panel panel-default">
                                                             <div class="panel-heading">
                                                                 <strong>'.$partitionNumber.'</strong>
@@ -397,12 +401,20 @@
                                                             </div>
                                                         </div>
                                                     ';
+                                                    $partitionCards .= $partitionCardHtml;
+                                                    if (strtolower((string) $partition['partition_status']) === 'vacant') {
+                                                        $availablePartitionCards .= $partitionCardHtml;
+                                                    }
                                                 }
                                                 if ($partitionCards === '') {
                                                     $partitionCards = '<i style="color:brown;">No available partitions to display right now.</i>';
                                                 }
+                                                if ($availablePartitionCards === '') {
+                                                    $availablePartitionCards = '<i style="color:brown;">No available partitions right now.</i>';
+                                                }
                                             } else {
                                                 $partitionCards = '<i style="color:brown;">No partitions added for this house yet.</i>';
+                                                $availablePartitionCards = '<i style="color:brown;">No available partitions right now.</i>';
                                             }
                                             $addPartitionForm = $canManageHouses ? '
                                                 <form action="functions/partition_manage.php" method="post">
@@ -495,8 +507,10 @@
                                                                     </h4>
                                                                 </div>
                                                                 <div class="modal-body">
-                                                                    <h4>Partitions ('.$partitionCount.')</h4>
-                                                                    '.$partitionCards.'
+                                                                    <h4>Available Partitions ('.$partitionBadgeText.')</h4>
+                                                                    <p class="text-muted">'.$availablePartitionCount.' partition(s) available out of '.$partitionCount.' total.</p>
+                                                                    '.$availablePartitionCards.'
+                                                                    '.($partitionCards !== $availablePartitionCards ? '<hr><h4>Other Visible Partitions</h4>'.$partitionCards : '').'
                                                                 </div>
                                                                 <div class="modal-footer">
                                                                     <button type="button" class="btn btn-default waves-effect" data-dismiss="modal">Close</button>
@@ -695,7 +709,11 @@
                                                         </div>
                                                         <div class="modal-body">
                                                             '.$addPartitionForm.'
-                                                            <h4>Partitions ('.$partitionCount.')</h4>
+                                                            <h4>Available Partitions ('.$partitionBadgeText.')</h4>
+                                                            <p class="text-muted">'.$availablePartitionCount.' partition(s) available out of '.$partitionCount.' total.</p>
+                                                            '.$availablePartitionCards.'
+                                                            <hr>
+                                                            <h4>All Partitions ('.$partitionCount.')</h4>
                                                             '.$partitionCards.'
                                                         </div>
                                                         <div class="modal-footer">
@@ -773,33 +791,139 @@
                 <!-- /.right-sidebar -->
             </div>
             <?php require "admin_footer.php"; ?>
-    <div id="photo-preview-modal" class="modal fade" tabindex="-1" role="dialog" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-                    <h4 class="modal-title" id="photo-preview-title">Photo Preview</h4>
-                </div>
-                <div class="modal-body text-center">
-                    <img id="photo-preview-image" src="" alt="Photo preview" style="max-width:100%; max-height:75vh; object-fit:contain;">
-                </div>
+    <div id="photo-preview-overlay" style="display:none; position:fixed; inset:0; background:rgba(7, 26, 45, 0.96); z-index:3000; padding:64px 18px 24px; overflow:auto;">
+        <button type="button" id="photo-preview-close" aria-label="Close photo preview" style="position:fixed; top:14px; right:20px; z-index:3002; width:46px; height:46px; border:1px solid rgba(200, 164, 73, 0.55); border-radius:50%; background:#071A2D; color:#F6F2E8; font-size:34px; line-height:40px; cursor:pointer; box-shadow:0 10px 28px rgba(0, 0, 0, 0.35);">&times;</button>
+        <div style="max-width:1180px; min-height:calc(100vh - 88px); margin:0 auto; display:flex; flex-direction:column; gap:14px;">
+            <h4 id="photo-preview-title" style="color:#F6F2E8; text-align:center; margin:0 60px 0; font-weight:700;">Photo Preview</h4>
+            <div style="flex:1; display:flex; align-items:center; justify-content:center; background:#071A2D; border:1px solid rgba(200, 164, 73, 0.45); border-radius:8px; padding:14px; box-shadow:0 20px 50px rgba(0, 0, 0, 0.35);">
+                <img id="photo-preview-image" src="" alt="Photo preview" style="display:block; max-width:100%; max-height:calc(100vh - 190px); object-fit:contain; margin:0 auto;">
             </div>
+            <div id="photo-preview-thumbs" style="display:none; gap:10px; justify-content:center; flex-wrap:wrap;"></div>
         </div>
     </div>
     <script>
     $(document).ready(function() {
-        $(document).on('click', '.js-photo-preview', function(event) {
-            event.preventDefault();
-            var photoSrc = $(this).data('photo-src');
-            var photoTitle = $(this).data('photo-title') || 'Photo Preview';
+        var $photoPreviewOverlay = $('#photo-preview-overlay');
+        var $photoPreviewImage = $('#photo-preview-image');
+        var $photoPreviewTitle = $('#photo-preview-title');
+        var $photoPreviewThumbs = $('#photo-preview-thumbs');
+        var photoPreviewOpen = false;
 
-            $('#photo-preview-title').text(photoTitle);
-            $('#photo-preview-image').attr('src', photoSrc);
-            $('#photo-preview-modal').modal('show');
+        $('.modal').removeClass('fade');
+
+        $(document).on('hidden.bs.modal', '.modal', function() {
+            if (!$('.modal:visible').length) {
+                $('.modal-backdrop').remove();
+                $('body').removeClass('modal-open').css('padding-right', '');
+            }
         });
 
-        $('#photo-preview-modal').on('hidden.bs.modal', function() {
-            $('#photo-preview-image').attr('src', '');
+        function setPhotoPreviewImage(photoSrc, photoTitle) {
+            if (!photoSrc) {
+                return;
+            }
+
+            $photoPreviewTitle.text(photoTitle || 'Photo Preview');
+            $photoPreviewImage.attr('src', photoSrc);
+            $photoPreviewThumbs.find('button').removeClass('active');
+            $photoPreviewThumbs.find('button').each(function() {
+                if ($(this).data('photo-src') === photoSrc) {
+                    $(this).addClass('active');
+                }
+            });
+        }
+
+        function showPhotoPreview(photoSrc, photoTitle, photos) {
+            if (!photoSrc) {
+                return;
+            }
+
+            photos = photos || [];
+            photoPreviewOpen = true;
+            $photoPreviewThumbs.empty().hide();
+
+            if (photos.length > 1) {
+                $.each(photos, function(index, photo) {
+                    var $button = $('<button type="button" style="width:82px; height:62px; padding:2px; border:2px solid rgba(200, 164, 73, 0.4); border-radius:4px; background:#071A2D; cursor:pointer;"></button>');
+                    var $image = $('<img alt="" style="width:100%; height:100%; object-fit:cover; display:block;">');
+                    $button.attr('data-photo-src', photo.src);
+                    $button.attr('data-photo-title', photo.title || 'Photo Preview');
+                    $image.attr('src', photo.src);
+                    $button.append($image);
+                    $photoPreviewThumbs.append($button);
+                });
+                $photoPreviewThumbs.css('display', 'flex');
+            }
+
+            setPhotoPreviewImage(photoSrc, photoTitle);
+            $photoPreviewOverlay.stop(true, true).fadeIn(120);
+            $('body').addClass('photo-preview-open');
+        }
+
+        $(document).on('click', '.js-photo-preview', function(event) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+
+            var photoSrc = $(this).data('photo-src');
+            var photoTitle = $(this).data('photo-title') || 'Photo Preview';
+            showPhotoPreview(photoSrc, photoTitle);
+        });
+
+        $(document).on('click', '.js-photo-gallery', function(event) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+
+            var targetSelector = $(this).data('gallery-target');
+            var photos = [];
+
+            $(targetSelector).find('.js-photo-preview').each(function() {
+                var src = $(this).data('photo-src');
+                if (src) {
+                    photos.push({
+                        src: src,
+                        title: $(this).data('photo-title') || 'Photo Preview'
+                    });
+                }
+            });
+
+            if (photos.length) {
+                showPhotoPreview(photos[0].src, photos[0].title, photos);
+            }
+        });
+
+        $photoPreviewThumbs.on('click', 'button', function() {
+            setPhotoPreviewImage($(this).data('photo-src'), $(this).data('photo-title'));
+        });
+
+        function hidePhotoPreview() {
+            if (!photoPreviewOpen) {
+                return;
+            }
+
+            photoPreviewOpen = false;
+            $photoPreviewOverlay.stop(true, true).fadeOut(120, function() {
+                $photoPreviewImage.attr('src', '');
+                $photoPreviewThumbs.empty().hide();
+            });
+            $('body').removeClass('photo-preview-open');
+        }
+
+        $('#photo-preview-close').on('click', function() {
+            hidePhotoPreview();
+        });
+
+        $photoPreviewOverlay.on('click', function(event) {
+            if (event.target === this) {
+                hidePhotoPreview();
+            }
+        });
+
+        $(document).on('keyup', function(event) {
+            if (event.key === 'Escape' && $photoPreviewOverlay.is(':visible')) {
+                hidePhotoPreview();
+            }
         });
 
         $('#myTable').DataTable();

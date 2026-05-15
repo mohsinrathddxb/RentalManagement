@@ -118,8 +118,11 @@ if (is_logged_in_temporary()) {
                             }
 
                             while ($row = mysqli_fetch_array($query)) {
-                                $documents = '<a class="btn btn-xs btn-info" href="invoice-pdf.php?invoice='.urlencode($row["invoiceNumber"]).'">Invoice PDF</a> ';
-                                $documents .= '<a class="btn btn-xs btn-success" href="payment-receipt-pdf.php?payment='.(int) $row["paymentID"].'">Receipt PDF</a>';
+                                $pdfMobileEmail = isset($_SESSION['email']) ? $_SESSION['email'] : '';
+                                $invoiceMobileQuery = pdf_mobile_query_string($pdfMobileEmail, 'invoice', $row["invoiceNumber"]);
+                                $receiptMobileQuery = pdf_mobile_query_string($pdfMobileEmail, 'receipt', (int) $row["paymentID"]);
+                                $documents = '<a class="btn btn-xs btn-info" href="invoice-pdf.php?invoice='.urlencode($row["invoiceNumber"]).$invoiceMobileQuery.'">Invoice PDF</a> ';
+                                $documents .= '<a class="btn btn-xs btn-success" href="payment-receipt-pdf.php?payment='.(int) $row["paymentID"].$receiptMobileQuery.'">Receipt PDF</a>';
                                 echo '
                                 <tr>
                                     <td>'.$row["invoiceNumber"].'</td>

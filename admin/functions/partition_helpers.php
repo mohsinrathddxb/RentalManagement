@@ -134,4 +134,21 @@ function count_house_partitions($connection, $houseId) {
     return (int) $row['total'];
 }
 
+function get_house_partition_counts($connection, $houseId) {
+    $houseId = (int) $houseId;
+    $result = mysqli_query($connection, "
+        SELECT
+            COUNT(*) AS total,
+            SUM(CASE WHEN LOWER(`partition_status`) = 'vacant' THEN 1 ELSE 0 END) AS available
+        FROM `house_partitions`
+        WHERE `house_id` = $houseId
+    ");
+    $row = $result ? mysqli_fetch_assoc($result) : ['total' => 0, 'available' => 0];
+
+    return [
+        'total' => (int) $row['total'],
+        'available' => (int) $row['available']
+    ];
+}
+
 ?>
