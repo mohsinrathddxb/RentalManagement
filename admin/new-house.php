@@ -102,11 +102,61 @@ if (is_logged_in_temporary()) {
                     <div>
                         <?php echo $error; ?>
                     </div>
-                    <div class="white-box">
+                    <style>
+                        .new-house-page .white-box {
+                            padding: 24px;
+                        }
+                        .new-house-form-wrap {
+                            width: 75%;
+                            max-width: 1100px;
+                            margin: 0;
+                        }
+                        .new-house-form-wrap .form-control {
+                            height: 48px;
+                            min-height: 48px;
+                            font-size: 15px;
+                        }
+                        .new-house-form-wrap .input-group-addon {
+                            min-width: 40px;
+                            height: 48px;
+                            vertical-align: middle;
+                        }
+                        .new-house-footer-wrap {
+                            clear: both;
+                            width: 100%;
+                            display: block;
+                        }
+                        .new-house-footer-spacer {
+                            clear: both;
+                            width: 100%;
+                            height: 24px;
+                        }
+                        .footer {
+                            left: 0 !important;
+                        }
+                        @media (max-width: 991px) {
+                            .new-house-form-wrap {
+                                width: 100%;
+                            }
+                        }
+                        @media (max-width: 767px) {
+                            .new-house-page .white-box {
+                                padding: 16px 14px;
+                            }
+                            .new-house-page .box-title {
+                                line-height: 1.35;
+                            }
+                            .new-house-form-wrap .btn {
+                                margin-bottom: 8px;
+                            }
+                        }
+                    </style>
+                    <div class="white-box new-house-page">
                         <h3 class="box-title m-b-0"><i class="fa fa-institution fa-3x"></i> Add A New House</h3>
                         <p class="text-muted m-b-30 font-13">Fill in the form below:</p>
                         <div class="row">
                             <div class="col-sm-12 col-xs-12">
+                                <div class="new-house-form-wrap">
                                 <form action="new-house.php" method="post" enctype="multipart/form-data">
                                     <div class="form-group">
                                         <label for="hname">House Name: *</label>
@@ -171,15 +221,15 @@ if (is_logged_in_temporary()) {
                                     <button type="submit" name="submit" class="btn btn-success waves-effect waves-light m-r-10">Save House</button>
                                     <button type="reset" class="btn btn-inverse waves-effect waves-light">Reset</button>
                                 </form>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
+            <div class="new-house-footer-spacer"></div>
             <?php require "admin_footer.php"; ?>
-        </div>
-    </div>
 
     <?php
 } else {

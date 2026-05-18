@@ -8,6 +8,7 @@ ob_start();
 require_once "functions/db.php";
 require_once "functions/tenant_helpers.php";
 require_once "functions/invoice_pdf_helpers.php";
+require_once "functions/ui_column_preferences.php";
 
 session_start();
 
@@ -20,6 +21,7 @@ if (is_logged_in_temporary()) {
     require_admin_user();
     ensure_tenant_schema($connection);
     ensure_invoice_pdf_columns($connection);
+    ensure_ui_column_preferences_schema($connection);
 
     $sql = "
         SELECT
@@ -41,6 +43,8 @@ if (is_logged_in_temporary()) {
     ";
 
     $query = mysqli_query($connection, $sql);
+    $savedPaymentColumns = get_ui_visible_columns($connection, $_SESSION['email'], 'payments_view');
+    $savedPaymentColumnsJson = json_encode(is_array($savedPaymentColumns) ? $savedPaymentColumns : []);
 
     require "admin_header0.php";
     require "admin_left_panel.php";
@@ -74,9 +78,23 @@ if (is_logged_in_temporary()) {
                         echo '<div class="alert alert-danger"><a href="#" class="close" data-dismiss="alert" aria-label="close"></a><strong>ERROR!! </strong><p>There was an error during the deletion of this payment. Please try again.</p></div>';
                     }
                     ?>
+                    <style>
+                        @media (max-width: 767px) {
+                            #example23 { width: 100% !important; }
+                            #example23 th, #example23 td { white-space: normal !important; font-size: 11px; line-height: 1.35; padding: 8px 6px !important; }
+                        }
+                    </style>
 
                     <h3 class="box-title m-b-0">Current Payment Listing ( <x style="color: orange;"><?php echo mysqli_num_rows($query);?></x> )</h3>
                     <p class="text-muted m-b-30">Export data to Copy, CSV, Excel, PDF & Print</p>
+                    <div class="m-b-15">
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-default btn-sm dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                Columns <span class="caret"></span>
+                            </button>
+                            <ul class="dropdown-menu" id="payment-column-toggles"></ul>
+                        </div>
+                    </div>
 
                     <div class="table-responsive">
                         <table id="example23" class="display nowrap" cellspacing="0" width="100%">
@@ -87,29 +105,29 @@ if (is_logged_in_temporary()) {
                                 echo '
                                 <thead>
                                     <tr>
-                                        <th>Invoice No.</th>
                                         <th>Tenant</th>
+                                        <th>Paid Amount</th>
+                                        <th>Documents</th>
+                                        <th>Invoice No.</th>
                                         <th>House</th>
                                         <th>Expected Amount</th>
-                                        <th>Paid Amount</th>
                                         <th>Balance</th>
                                         <th>Date Paid</th>
                                         <th>Comments</th>
-                                        <th>Documents</th>
                                         <th>Actions</th>
                                     </tr>
                                 </thead>
                                 <tfoot>
                                     <tr>
-                                        <th>Invoice No.</th>
                                         <th>Tenant</th>
+                                        <th>Paid Amount</th>
+                                        <th>Documents</th>
+                                        <th>Invoice No.</th>
                                         <th>House</th>
                                         <th>Expected Amount</th>
-                                        <th>Paid Amount</th>
                                         <th>Balance</th>
                                         <th>Date Paid</th>
                                         <th>Comments</th>
-                                        <th>Documents</th>
                                         <th>Actions</th>
                                     </tr>
                                 </tfoot>
@@ -125,15 +143,15 @@ if (is_logged_in_temporary()) {
                                 $documents .= '<a class="btn btn-xs btn-success" href="payment-receipt-pdf.php?payment='.(int) $row["paymentID"].$receiptMobileQuery.'">Receipt PDF</a>';
                                 echo '
                                 <tr>
-                                    <td>'.$row["invoiceNumber"].'</td>
                                     <td>'.$row["tenant_name"].'</td>
+                                    <td>'.format_money_amount($row["amountPaid"]).'</td>
+                                    <td>'.$documents.'</td>
+                                    <td>'.$row["invoiceNumber"].'</td>
                                     <td>'.$row["house_name"].'</td>
                                     <td>'.format_money_amount($row["expectedAmount"]).'</td>
-                                    <td>'.format_money_amount($row["amountPaid"]).'</td>
                                     <td>'.format_money_amount($row["balance"]).'</td>
                                     <td>'.$row["dateofPayment"].'</td>
                                     <td>'.$row["comment"].'</td>
-                                    <td>'.$documents.'</td>
                                     <td><a href="#"><i class="fa fa-trash" data-toggle="modal" data-target="#responsive-modal'.$row["paymentID"].'" title="delete" style="color:red;"></i></a></td>
 
                                     <div id="responsive-modal'.$row["paymentID"].'" class="modal fade" tabindex="-1" role="dialog" aria-hidden="true" style="display: none;">
@@ -197,9 +215,86 @@ if (is_logged_in_temporary()) {
     </div>
     <?php require "admin_footer.php"; ?>
     <script>
-    $('#example23').DataTable({
+    var savedPaymentColumns = <?php echo $savedPaymentColumnsJson; ?>;
+    var isMobilePaymentView = window.matchMedia('(max-width: 767px)').matches;
+    if (isMobilePaymentView) {
+        $('#example23').removeClass('nowrap');
+    }
+    var paymentTable = $('#example23').DataTable({
         dom: 'Bfrtip',
-        buttons: ['copy', 'csv', 'excel', 'pdf', 'print']
+        buttons: ['copy', 'csv', 'excel', 'pdf', 'print'],
+        scrollX: !isMobilePaymentView,
+        autoWidth: false
+    });
+
+    if (isMobilePaymentView) {
+        paymentTable.columns.adjust().draw(false);
+    }
+
+    if (Array.isArray(savedPaymentColumns) && savedPaymentColumns.length > 0) {
+        paymentTable.columns().every(function(index) {
+            this.visible(savedPaymentColumns.indexOf(index) !== -1);
+        });
+    }
+
+    function escapePaymentHtml(value) {
+        return $('<div>').text(value).html();
+    }
+
+    function renderPaymentColumnToggles() {
+        var toggleHtml = '';
+        paymentTable.columns().every(function(index) {
+            var headerText = $(this.header()).text().trim();
+            if (!headerText) {
+                return;
+            }
+            var checked = this.visible() ? 'checked' : '';
+            toggleHtml += '<li><a href="#" class="payment-col-toggle" data-col="' + index + '"><label style="margin:0; font-weight:500; cursor:pointer;"><input type="checkbox" ' + checked + ' style="margin-right:8px;">' + escapePaymentHtml(headerText) + '</label></a></li>';
+        });
+        $('#payment-column-toggles').html(toggleHtml);
+    }
+
+    renderPaymentColumnToggles();
+
+    var paymentColumnSaveTimer = null;
+    function savePaymentColumnPreference() {
+        var visibleColumns = [];
+        paymentTable.columns().every(function(index) {
+            if (this.visible()) {
+                visibleColumns.push(index);
+            }
+        });
+
+        $.ajax({
+            url: 'functions/save_ui_columns.php',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                table_key: 'payments_view',
+                visible_columns: visibleColumns
+            })
+        });
+    }
+
+    function queuePaymentColumnPreferenceSave() {
+        if (paymentColumnSaveTimer) {
+            clearTimeout(paymentColumnSaveTimer);
+        }
+        paymentColumnSaveTimer = setTimeout(savePaymentColumnPreference, 220);
+    }
+
+    $('#payment-column-toggles').on('click', '.payment-col-toggle', function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        var columnIndex = parseInt($(this).data('col'), 10);
+        var column = paymentTable.column(columnIndex);
+        var visibleCount = paymentTable.columns(':visible').count();
+        if (column.visible() && visibleCount <= 1) {
+            return;
+        }
+        column.visible(!column.visible());
+        renderPaymentColumnToggles();
+        queuePaymentColumnPreferenceSave();
     });
     </script>
     <script src="../plugins/bower_components/styleswitcher/jQuery.style.switcher.js"></script>

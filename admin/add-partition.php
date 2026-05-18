@@ -25,9 +25,19 @@
         ensure_pic_type_column($connection);
 
         $email = $_SESSION['email'];
+        $selectedHouseId = isset($_GET['house_id']) ? (int) $_GET['house_id'] : 0;
         $houses = mysqli_query($connection, "SELECT * FROM `houses` ORDER BY `house_name` ASC");
         if ($canManagePartitions) {
-            $partitions = mysqli_query($connection, "SELECT hp.*, h.house_name, h.location FROM `house_partitions` hp LEFT JOIN `houses` h ON hp.house_id = h.houseID ORDER BY hp.partition_id DESC");
+            $partitions = mysqli_query($connection, "
+                SELECT hp.*, h.house_name, h.location
+                FROM `house_partitions` hp
+                LEFT JOIN `houses` h ON hp.house_id = h.houseID
+                ORDER BY
+                    CASE WHEN LOWER(hp.`partition_status`) = 'vacant' THEN 0 ELSE 1 END ASC,
+                    h.`house_name` ASC,
+                    hp.`partition_number` ASC,
+                    hp.`partition_id` ASC
+            ");
         } else {
             $tenantPartitionId = $currentTenant && isset($currentTenant['partition_id']) ? (int) $currentTenant['partition_id'] : 0;
             $partitions = mysqli_query($connection, "
@@ -35,7 +45,11 @@
                 FROM `house_partitions` hp
                 LEFT JOIN `houses` h ON hp.house_id = h.houseID
                 WHERE hp.`partition_status`='Vacant' ".($tenantPartitionId > 0 ? "OR hp.`partition_id`='$tenantPartitionId'" : '')."
-                ORDER BY hp.partition_id DESC
+                ORDER BY
+                    CASE WHEN LOWER(hp.`partition_status`) = 'vacant' THEN 0 ELSE 1 END ASC,
+                    h.`house_name` ASC,
+                    hp.`partition_number` ASC,
+                    hp.`partition_id` ASC
             ");
         }
 
@@ -107,16 +121,155 @@
                             }
                         ?>
 
+                        <style>
+                            .partition-page .white-box {
+                                padding: 24px;
+                            }
+                            .partition-create-row {
+                                display: grid;
+                                grid-template-columns: repeat(3, minmax(0, 1fr));
+                                gap: 14px 16px;
+                                align-items: end;
+                            }
+                            .partition-create-row .form-group {
+                                margin-bottom: 0;
+                            }
+                            .partition-create-row .form-control {
+                                width: 100% !important;
+                                height: 48px !important;
+                                min-height: 48px !important;
+                                font-size: 15px !important;
+                            }
+                            .partition-create-row .input-group {
+                                width: 100%;
+                            }
+                            .partition-create-row .input-group-addon {
+                                height: 48px;
+                                min-width: 40px;
+                                display: table-cell;
+                                vertical-align: middle;
+                            }
+                            .partition-create-row .partition-wide {
+                                grid-column: span 2;
+                            }
+                            .partition-create-row .partition-full {
+                                grid-column: 1 / -1;
+                            }
+                            .partition-create-row .partition-facilities {
+                                border: 1px solid #e4e7ea;
+                                padding: 12px;
+                            }
+                            .partition-list-wrap > .partition-item {
+                                border: 1px solid #e4e7ea;
+                                border-radius: 8px;
+                                padding: 14px 16px;
+                                margin-bottom: 14px;
+                            }
+                            .partition-item-header {
+                                display: flex;
+                                justify-content: space-between;
+                                gap: 12px;
+                                align-items: flex-start;
+                                margin-bottom: 8px;
+                            }
+                            .partition-item-title {
+                                margin: 0;
+                                font-size: 20px;
+                                font-weight: 600;
+                                color: #071A2D;
+                            }
+                            .partition-item-meta {
+                                margin-bottom: 8px;
+                                line-height: 1.6;
+                            }
+                            .partition-item-photos {
+                                display: grid;
+                                grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+                                gap: 12px;
+                                margin-top: 10px;
+                            }
+                            .partition-photo-card {
+                                border: 1px solid #e4e7ea;
+                                border-radius: 6px;
+                                padding: 8px;
+                                background: #fff;
+                            }
+                            .partition-photo-card img {
+                                width: 100%;
+                                height: 130px;
+                                object-fit: cover;
+                                display: block;
+                                border-radius: 4px;
+                            }
+                            .partition-edit-row {
+                                display: grid;
+                                grid-template-columns: repeat(4, minmax(0, 1fr));
+                                gap: 12px;
+                                align-items: end;
+                            }
+                            .partition-edit-row .form-group {
+                                margin-bottom: 0;
+                            }
+                            .partition-edit-row .form-control {
+                                width: 100% !important;
+                                height: 44px !important;
+                                min-height: 44px !important;
+                            }
+                            .partition-edit-row .partition-edit-full {
+                                grid-column: 1 / -1;
+                            }
+                            .partition-upload-row {
+                                display: grid;
+                                grid-template-columns: minmax(0, 1fr) 210px;
+                                gap: 12px;
+                                align-items: end;
+                                margin-top: 12px;
+                            }
+                            .partition-upload-row .form-group {
+                                margin-bottom: 0;
+                            }
+                            .partition-upload-row .form-control {
+                                height: 44px !important;
+                                min-height: 44px !important;
+                            }
+                            @media (max-width: 991px) {
+                                .partition-create-row,
+                                .partition-edit-row,
+                                .partition-upload-row {
+                                    grid-template-columns: 1fr;
+                                }
+                                .partition-create-row .partition-wide,
+                                .partition-create-row .partition-full,
+                                .partition-edit-row .partition-edit-full {
+                                    grid-column: auto;
+                                }
+                            }
+                            @media (max-width: 767px) {
+                                .partition-page .white-box {
+                                    padding: 16px 14px;
+                                }
+                                .partition-item-header {
+                                    flex-direction: column;
+                                }
+                                .partition-item-title {
+                                    font-size: 17px;
+                                }
+                                .partition-page .btn {
+                                    margin-bottom: 8px;
+                                }
+                            }
+                        </style>
+
                         <?php if ($canManagePartitions) { ?>
-                        <div class="white-box">
+                        <div class="white-box partition-page">
                             <h3 class="box-title m-b-0"><i class="fa fa-columns fa-3x"></i> Add Partition</h3>
                             <p class="text-muted m-b-30 font-13">Select a house, add the partition rent amount, and upload optional photos.</p>
 
                             <form action="functions/partition_manage.php" method="post" enctype="multipart/form-data">
                                 <input type="hidden" name="return_to" value="add-partition.php">
 
-                                <div class="row">
-                                    <div class="form-group col-md-6">
+                                <div class="partition-create-row">
+                                    <div class="form-group">
                                         <label for="house_id">House: *</label>
                                         <div class="input-group">
                                             <div class="input-group-addon"><i class="fa fa-building"></i></div>
@@ -125,7 +278,8 @@
                                                 <?php
                                                     if ($houses && mysqli_num_rows($houses) > 0) {
                                                         while ($house = mysqli_fetch_array($houses, MYSQLI_BOTH)) {
-                                                            echo '<option value="'.$house['houseID'].'">'.$house['house_name'].' - '.$house['location'].'</option>';
+                                                            $selected = $selectedHouseId === (int) $house['houseID'] ? ' selected' : '';
+                                                            echo '<option value="'.$house['houseID'].'"'.$selected.'>'.$house['house_name'].' - '.$house['location'].'</option>';
                                                         }
                                                     }
                                                 ?>
@@ -133,7 +287,7 @@
                                         </div>
                                     </div>
 
-                                    <div class="form-group col-md-3">
+                                    <div class="form-group">
                                         <label for="partition_number">Partition No./Name: *</label>
                                         <div class="input-group">
                                             <div class="input-group-addon"><i class="fa fa-columns"></i></div>
@@ -141,7 +295,7 @@
                                         </div>
                                     </div>
 
-                                    <div class="form-group col-md-3">
+                                    <div class="form-group">
                                         <label for="rent_amount">Rent Amount: *</label>
                                         <div class="input-group">
                                             <div class="input-group-addon"><i class="fa fa-money"></i></div>
@@ -149,7 +303,7 @@
                                         </div>
                                     </div>
 
-                                    <div class="form-group col-md-4">
+                                    <div class="form-group">
                                         <label for="partition_status">Status:</label>
                                         <select id="partition_status" name="partition_status" class="form-control">
                                             <option value="Vacant">Vacant</option>
@@ -157,19 +311,19 @@
                                         </select>
                                     </div>
 
-                                    <div class="form-group col-md-8">
+                                    <div class="form-group partition-wide">
                                         <label for="description">Description:</label>
                                         <input type="text" id="description" name="description" class="form-control" placeholder="Optional note">
                                     </div>
 
-                                    <div class="form-group col-md-12">
+                                    <div class="form-group partition-full">
                                         <label>Facilities:</label>
-                                        <div style="border:1px solid #e4e7ea; padding:12px;">
+                                        <div class="partition-facilities">
                                             <?php echo render_partition_facility_checkboxes(); ?>
                                         </div>
                                     </div>
 
-                                    <div class="form-group col-md-12">
+                                    <div class="form-group partition-full">
                                         <label for="house_photos">Partition Photo(s):</label>
                                         <div class="input-group">
                                             <div class="input-group-addon"><i class="fa fa-camera"></i></div>
@@ -186,13 +340,13 @@
                         </div>
                         <?php } ?>
 
-                        <div class="white-box">
+                        <div class="white-box partition-page">
                             <h3 class="box-title m-b-20">House Partitions</h3>
 
-                            <div class="row">
+                            <div class="partition-list-wrap">
                                 <?php
                                     if (!$partitions || mysqli_num_rows($partitions) === 0) {
-                                        echo '<div class="col-md-12"><i style="color:brown;">No partitions added yet.</i></div>';
+                                        echo '<i style="color:brown;">No partitions added yet.</i>';
                                     }
                                     else {
                                         while ($partition = mysqli_fetch_assoc($partitions)) {
@@ -221,18 +375,16 @@
                                                         </form>
                                                     ' : '';
                                                     $photoHtml .= '
-                                                        <div class="col-md-3 col-sm-4" style="margin-bottom:15px;">
-                                                            <div style="border:1px solid #e4e7ea; padding:8px;">
+                                                        <div class="partition-photo-card">
                                                                 <a href="#" class="js-photo-preview" data-photo-src="'.$picPath.'" data-photo-title="'.$partitionNumber.' photo">
-                                                                    <img src="'.$picPath.'" alt="'.$partitionNumber.' photo" style="width:100%; height:130px; object-fit:cover; cursor:pointer;">
+                                                                    <img src="'.$picPath.'" alt="'.$partitionNumber.' photo" style="cursor:pointer;">
                                                                 </a>
                                                                 '.$deletePhoto.'
-                                                            </div>
                                                         </div>
                                                     ';
                                                 }
                                             } else {
-                                                $photoHtml = '<div class="col-md-12"><i style="color:brown;">No photos uploaded for this partition yet.</i></div>';
+                                                $photoHtml = '<i style="color:brown;">No photos uploaded for this partition yet.</i>';
                                             }
 
                                             $adminControls = $canManagePartitions ? '
@@ -252,16 +404,16 @@
                                                     <form action="functions/partition_manage.php" method="post">
                                                         <input type="hidden" name="partition_id" value="'.$partitionId.'">
                                                         <input type="hidden" name="return_to" value="add-partition.php">
-                                                        <div class="row">
-                                                            <div class="form-group col-md-3">
+                                                        <div class="partition-edit-row">
+                                                            <div class="form-group">
                                                                 <label>Partition No./Name</label>
                                                                 <input type="text" name="partition_number" class="form-control" value="'.$partitionNumber.'" required>
                                                             </div>
-                                                            <div class="form-group col-md-3">
+                                                            <div class="form-group">
                                                                 <label>Rent Amount</label>
                                                                 <input type="number" min="0" step="0.01" name="rent_amount" class="form-control" value="'.$rentAmount.'" required>
                                                             </div>
-                                                            <div class="form-group col-md-3">
+                                                            <div class="form-group">
                                                                 <label>Status</label>
                                                                 <select name="partition_status" class="form-control">
                                                                     <option value="'.$partitionStatus.'" selected>'.$partitionStatus.'</option>
@@ -269,17 +421,17 @@
                                                                     <option value="Occupied">Occupied</option>
                                                                 </select>
                                                             </div>
-                                                            <div class="form-group col-md-3">
+                                                            <div class="form-group">
                                                                 <label>Description</label>
                                                                 <input type="text" name="description" class="form-control" value="'.$description.'">
                                                             </div>
-                                                            <div class="form-group col-md-12">
+                                                            <div class="form-group partition-edit-full">
                                                                 <label>Facilities</label>
                                                                 <div style="border:1px solid #e4e7ea; padding:12px;">
                                                                     '.render_partition_facility_checkboxes($facilities).'
                                                                 </div>
                                                             </div>
-                                                            <div class="col-md-12">
+                                                            <div class="partition-edit-full">
                                                                 <button type="submit" name="editPartition" class="btn btn-success btn-sm">
                                                                     <i class="fa fa-save"></i> Update Partition
                                                                 </button>
@@ -291,11 +443,11 @@
                                                         <input type="hidden" name="partition_id" value="'.$partitionId.'">
                                                         <input type="hidden" name="pic_type" value="Partitions">
                                                         <input type="hidden" name="return_to" value="add-partition.php">
-                                                        <div class="row">
-                                                            <div class="form-group col-md-8">
+                                                        <div class="partition-upload-row">
+                                                            <div class="form-group">
                                                                 <input type="file" name="house_photos[]" class="form-control" accept="image/jpeg,image/png,image/gif,image/webp" multiple required>
                                                             </div>
-                                                            <div class="form-group col-md-4">
+                                                            <div class="form-group">
                                                                 <button type="submit" name="uploadHousePhoto" class="btn btn-success btn-sm">
                                                                     <i class="fa fa-upload"></i> Upload Photo(s)
                                                                 </button>
@@ -306,18 +458,22 @@
                                             ' : '';
 
                                             echo '
-                                                <div class="col-md-12" style="margin-bottom:20px;">
-                                                    <div style="border:1px solid #e4e7ea; padding:15px;">
-                                                        <h4>'.$partitionNumber.' <small>'.$houseName.' - '.$location.'</small></h4>
-                                                        <p><strong>Rent Amount:</strong> '.$rentAmount.'</p>
-                                                        <p><strong>Status:</strong> '.$partitionStatus.'</p>
-                                                        '.($description !== '' ? '<p><strong>Description:</strong> '.$description.'</p>' : '').'
-                                                        <p><strong>Facilities:</strong><br>'.render_partition_facilities_badges($facilities).'</p>
-                                                        '.$adminControls.'
-                                                        <hr>
-                                                        <h5>Partition Photos</h5>
-                                                        <div class="row">'.$photoHtml.'</div>
+                                                <div class="partition-item">
+                                                    <div class="partition-item-header">
+                                                        <div>
+                                                            <h4 class="partition-item-title">'.$partitionNumber.' <span class="label label-info" style="margin-left:8px;">'.$partitionStatus.'</span></h4>
+                                                            <div class="text-muted">'.$houseName.' - '.$location.'</div>
+                                                        </div>
+                                                        <div class="text-right"><strong>Rent:</strong> '.$rentAmount.'</div>
                                                     </div>
+                                                    <div class="partition-item-meta">
+                                                        '.($description !== '' ? '<p><strong>Description:</strong> '.$description.'</p>' : '').'
+                                                        <div><strong>Facilities:</strong><br>'.render_partition_facilities_badges($facilities).'</div>
+                                                    </div>
+                                                    '.$adminControls.'
+                                                    <hr>
+                                                    <h5>Partition Photos</h5>
+                                                    <div class="partition-item-photos">'.$photoHtml.'</div>
                                                 </div>
                                             ';
                                         }

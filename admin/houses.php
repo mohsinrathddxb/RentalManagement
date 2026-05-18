@@ -11,6 +11,7 @@
     require_once "functions/tenant_helpers.php";
     require_once "functions/partition_helpers.php";
     require_once "functions/house_photo_helpers.php";
+    require_once "functions/ui_column_preferences.php";
 
     // Initialize the session
 
@@ -30,13 +31,33 @@
     ensure_tenant_schema($connection);
     ensure_partition_tables($connection);
     ensure_pic_type_column($connection);
+    ensure_ui_column_preferences_schema($connection);
     $currentTenant = get_logged_in_tenant_record();
     
 
     $email = $_SESSION['email'];
 
-    $sql = "SELECT * FROM `houses`";
+    $sql = "
+        SELECT
+            h.*,
+            COALESCE(SUM(CASE WHEN LOWER(hp.`partition_status`) = 'vacant' THEN 1 ELSE 0 END), 0) AS `available_partition_count`,
+            COALESCE(COUNT(hp.`partition_id`), 0) AS `partition_count`
+        FROM `houses` h
+        LEFT JOIN `house_partitions` hp ON hp.`house_id` = h.`houseID`
+        GROUP BY h.`houseID`
+        ORDER BY
+            CASE
+                WHEN LOWER(h.`house_status`) = 'vacant' THEN 0
+                WHEN COALESCE(SUM(CASE WHEN LOWER(hp.`partition_status`) = 'vacant' THEN 1 ELSE 0 END), 0) > 0 THEN 1
+                ELSE 2
+            END ASC,
+            `available_partition_count` DESC,
+            h.`house_name` ASC
+    ";
     $query = mysqli_query($connection, $sql);
+    $savedHouseColumns = get_ui_visible_columns($connection, $_SESSION['email'], 'houses_view');
+    $savedHouseColumnsJson = json_encode(is_array($savedHouseColumns) ? $savedHouseColumns : []);
+    $houseModalMarkup = [];
     
     /*******************************************************
                     introduce the admin header
@@ -176,8 +197,107 @@
                                     
 								?>	
 
+                            <style>
+                                [id^="responsive-modal_edit"] .modal-dialog {
+                                    width: min(960px, 92vw);
+                                }
+                                [id^="responsive-modal_edit"] .modal-footer {
+                                    display: block;
+                                    text-align: left;
+                                    padding: 24px;
+                                }
+                                [id^="responsive-modal_edit"] .modal-footer form {
+                                    display: block;
+                                    width: 100%;
+                                }
+                                [id^="responsive-modal_edit"] .modal-footer form::after,
+                                [id^="responsive-modal_edit"] .modal-footer .row::after {
+                                    content: "";
+                                    display: block;
+                                    clear: both;
+                                }
+                                [id^="responsive-modal_edit"] .modal-footer > hr,
+                                [id^="responsive-modal_edit"] .modal-footer > h4,
+                                [id^="responsive-modal_edit"] .modal-footer > .row {
+                                    clear: both;
+                                }
+                                [id^="responsive-modal_edit"] .modal-footer > h4 {
+                                    margin: 18px 0 12px;
+                                }
+                                [id^="responsive-modal_edit"] .modal-footer .btn {
+                                    margin-top: 6px;
+                                }
+                                [id^="responsive-modal_edit"] .modal-footer .input-group {
+                                    width: 100%;
+                                }
+                                [id^="responsive-modal_edit"] .modal-footer .form-control {
+                                    width: 100%;
+                                }
+                                [id^="responsive-modal_edit"] .modal-footer .row .col-sm-4,
+                                [id^="responsive-modal_edit"] .modal-footer .row .col-sm-8,
+                                [id^="responsive-modal_edit"] .modal-footer .row .col-md-4,
+                                [id^="responsive-modal_edit"] .modal-footer .row .col-md-8,
+                                [id^="responsive-modal_edit"] .modal-footer .row .col-md-12 {
+                                    margin-bottom: 12px;
+                                }
+                                @media (max-width: 767px) {
+                                    [id^="responsive-modal_edit"] .modal-dialog {
+                                        width: auto;
+                                        margin: 10px;
+                                    }
+                                    [id^="responsive-modal_edit"] .modal-footer {
+                                        padding: 18px;
+                                    }
+                                    .table-responsive {
+                                        border: 0;
+                                    }
+                                    #example23 {
+                                        width: 100% !important;
+                                    }
+                                    #example23 th,
+                                    #example23 td {
+                                        white-space: normal !important;
+                                        font-size: 11px;
+                                        line-height: 1.35;
+                                        padding: 8px 6px !important;
+                                        vertical-align: middle;
+                                    }
+                                    #example23 .btn,
+                                    #example23 .label,
+                                    #example23 a {
+                                        font-size: 10px;
+                                    }
+                                    .dataTables_wrapper .dt-buttons .btn {
+                                        margin-bottom: 6px;
+                                        padding: 5px 8px;
+                                        font-size: 11px;
+                                    }
+                                    .dataTables_wrapper .dataTables_filter {
+                                        float: none !important;
+                                        text-align: left !important;
+                                        margin-top: 8px;
+                                    }
+                                    .dataTables_wrapper .dataTables_filter input {
+                                        width: 100px !important;
+                                        margin-left: 6px !important;
+                                    }
+                                    .dataTables_wrapper .dataTables_paginate .paginate_button {
+                                        padding: 0.2em 0.55em !important;
+                                        font-size: 11px;
+                                    }
+                                }
+                            </style>
+
                             <h3 class="box-title m-b-0">Current house listings ( <x style="color: orange;"><?php echo mysqli_num_rows($query);?></x> )</h3>
                             <p class="text-muted m-b-30">Export data to Copy, CSV, Excel, PDF & Print</p>
+                            <div class="m-b-15">
+                                <div class="btn-group">
+                                    <button type="button" class="btn btn-default btn-sm dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                        Columns <span class="caret"></span>
+                                    </button>
+                                    <ul class="dropdown-menu" id="house-column-toggles"></ul>
+                                </div>
+                            </div>
                             <div class="table-responsive">
                                 <table id="example23" class="display nowrap" cellspacing="0" width="100%">
 
@@ -192,29 +312,29 @@
                                                     <thead>
                                                     <tr>
                                                         <th>House ID</th>
+                                                        '.($canManageHouses ? '<th>Actions</th>' : '').'
                                                         <th>House Name</th>
                                                         <th>No. of rooms</th>
                                                         <th>Rent amount</th>
                                                         <th>Location</th>
                                                         <th>Bedrooms</th>
+                                                        <th>Partitions</th>
                                                         <th>House Status</th>
                                                         <th>Photos</th>
-                                                        <th>Partitions</th>
-                                                        '.($canManageHouses ? '<th>Actions</th>' : '').'
                                                     </tr>
                                                 </thead>
                                                 <tfoot>
                                                     <tr>
                                                         <th>House ID</th>
+                                                        '.($canManageHouses ? '<th>Actions</th>' : '').'
                                                         <th>House Name</th>
                                                         <th>No. of rooms</th>
                                                         <th>Rent amount</th>
                                                         <th>Location</th>
                                                         <th>Bedrooms</th>
+                                                        <th>Partitions</th>
                                                         <th>House Status</th>
                                                         <th>Photos</th>
-                                                        <th>Partitions</th>
-                                                        '.($canManageHouses ? '<th>Actions</th>' : '').'
                                                     </tr>
                                                 </tfoot>
                                                 <tbody>
@@ -264,7 +384,7 @@
                                             $partitionCount = $partitionCounts['total'];
                                             $availablePartitionCount = $partitionCounts['available'];
                                             $partitionBadgeText = $availablePartitionCount.'/'.$partitionCount;
-                                            $partitionBadge = '<a href="#" class="label label-info" data-toggle="modal" data-target="#responsive-modal_partitions'.$i.'" title="'.$availablePartitionCount.' partition(s) available out of '.$partitionCount.' total">'.$partitionBadgeText.'</a>';
+                                            $partitionBadge = '<a href="add-partition.php?house_id='.$i.'" class="label label-info" title="Open partitions page for '.$row["house_name"].'">'.$partitionBadgeText.'</a>';
                                             $partitionRows = get_house_partitions($connection, $i);
                                             $partitionCards = '';
                                             $availablePartitionCards = '';
@@ -464,14 +584,14 @@
                                                         <td>'.$row["rent_amount"].'</td>
                                                         <td>'.$row["location"].'</td>
                                                         <td>'.$row["num_of_bedrooms"].'</td>
+                                                        <td>'.$partitionBadge.'</td>
                                                         <td>'.$row["house_status"].'</td>
                                                         <td>'.$photoBadge.'</td>
-                                                        <td>'.$partitionBadge.'</td>
                                                     </tr>
                                                 ';
 
                                                 if ($photoCount > 0) {
-                                                    echo '
+                                                    $houseModalMarkup[] = '
                                                         <div id="responsive-modal_photos'.$i.'" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true" style="overflow-y:auto; display:none;">
                                                             <div class="modal-dialog modal-lg">
                                                                 <div class="modal-content">
@@ -496,7 +616,7 @@
                                                     ';
                                                 }
 
-                                                echo '
+                                                $houseModalMarkup[] = '
                                                     <div id="responsive-modal_partitions'.$i.'" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true" style="overflow-y:auto; display:none;">
                                                         <div class="modal-dialog modal-lg">
                                                             <div class="modal-content">
@@ -527,34 +647,37 @@
 
                                         <tr>
                                             <td>'.$row["houseID"].'</td>
-                                            <td>
-                                            <a href="#" title="Edit record" style="color:#03a9f3" data-toggle="modal" data-target="#responsive-modal_edit'.$i.'">
-                                            '.$row["house_name"].' </a>
-                                            </td>
-                                            <td>'.$row["number_of_rooms"].'</td>
-                                            <td>'.$row["rent_amount"].'</td>
-                                            <td>'.$row["location"].'</td>
-                                            <td>'.$row["num_of_bedrooms"].'</td>
-                                            <td>'.$row["house_status"].'</td>
-                                            <td>'.$photoBadge.'</td>
-                                            <td>'.$partitionBadge.'</td>
                                             ';
 
                                             if ($canManageHouses) {
                                                 echo '
                                                 <td>
-                                                    <a href="#"><i class="fa fa-trash"  data-toggle="modal" data-target="#responsive-modal'.$row["houseID"].'" title="remove" style="color:red;"></i></a> || 
-                                                    <a href="#" title="Edit record"><i class="fa fa-edit"  data-toggle="modal" data-target="#responsive-modal_edit'.$i.'" title="Edit" style="color:#03a9f3;"></i></a> ||
-                                                    <a href="#" title="Upload beds / partitions photos"><i class="fa fa-camera" data-toggle="modal" data-target="#responsive-modal_photos'.$i.'" title="Photos" style="color:#00c292;"></i></a>
+                                                    <a href="#" class="js-house-delete-trigger" data-target="#responsive-modal'.$row["houseID"].'" title="Remove house"><i class="fa fa-trash" style="color:red;"></i></a> || 
+                                                    <a href="#" class="js-house-edit-trigger" data-target="#responsive-modal_edit'.$i.'" title="Edit house"><i class="fa fa-edit" style="color:#03a9f3;"></i></a> ||
+                                                    <a href="#" class="js-house-photo-trigger" data-target="#responsive-modal_photos'.$i.'" title="Upload beds / partitions photos"><i class="fa fa-camera" style="color:#00c292;"></i></a>
                                                 </td>
                                                 ';
                                             }
 
                                             echo '
+                                                        <td>
+                                                            <a href="#" title="Edit record" style="color:#03a9f3" data-toggle="modal" data-target="#responsive-modal_edit'.$i.'">
+                                                                '.$row["house_name"].'
+                                                            </a>
+                                                        </td>
+                                                        <td>'.$row["number_of_rooms"].'</td>
+                                                        <td>'.$row["rent_amount"].'</td>
+                                                        <td>'.$row["location"].'</td>
+                                                        <td>'.$row["num_of_bedrooms"].'</td>
+                                                        <td>'.$partitionBadge.'</td>
+                                                        <td>'.$row["house_status"].'</td>
+                                                        <td>'.$photoBadge.'</td>
+                                                    </tr>';
 
+                                            $houseModalMarkup[] = '
                                             <!-- /.modal to edit -->
                                             <div id="responsive-modal_edit'.$i.'" class=" modal fade" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true" style="overflow-y:auto; display:none;">
-                                                <div class="modal-dialog">
+                                                <div class="modal-dialog modal-lg">
                                                     <div class="modal-content">
                                                         <div class="modal-header">
                                                             <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
@@ -608,23 +731,53 @@
 
                                                         
 
-                                                        <div class="col-md-12">
-                                                            
-                                                            <button type="button" class="btn btn-default waves-effect" data-dismiss="modal">Cancel</button>
-                                                            <button type="submit" name="editHouse" class="btn btn-danger waves-effect waves-light">Update Record</button>
-                                                        </div>
-
                                                         </div>
 
                                                             </form>
+                                                            <hr>
+                                                            <h4><i class="fa fa-camera"></i> Upload New Image</h4>
+                                                            <form action="functions/house_photo_manage.php" method="post" enctype="multipart/form-data">
+                                                                <input type="hidden" name="house_id" value="'.$row["houseID"].'">
+                                                                <input type="hidden" name="return_to" value="houses.php">
+                                                                <div class="row">
+                                                                    <div class="form-group col-md-4">
+                                                                        <label>Photo Type: *</label>
+                                                                        <select name="pic_type" class="form-control" required>
+                                                                            <option value="House">House</option>
+                                                                            <option value="Beds">Beds</option>
+                                                                            <option value="Partitions">Partitions</option>
+                                                                        </select>
+                                                                    </div>
+                                                                    <div class="form-group col-md-8">
+                                                                        <label>Select Photo(s): *</label>
+                                                                        <input type="file" name="house_photos[]" class="form-control" accept="image/jpeg,image/png,image/gif,image/webp" multiple required>
+                                                                        <small class="text-muted">Allowed: JPG, PNG, GIF, WEBP. Max 5MB per image.</small>
+                                                                    </div>
+                                                                    <div class="col-md-12">
+                                                                        <button type="submit" name="uploadHousePhoto" class="btn btn-success">
+                                                                            <i class="fa fa-upload"></i> Upload Photo(s)
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            </form>
+                                                            <hr>
+                                                            <h4>Current Uploaded Photos ('.$photoCount.')</h4>
+                                                            <div class="row">
+                                                                '.$photoCards.'
+                                                            </div>
+                                                            <hr>
+                                                            <div class="text-left">
+                                                                <button type="button" class="btn btn-default waves-effect" data-dismiss="modal">Close</button>
+                                                                <button type="submit" name="editHouse" class="btn btn-danger waves-effect waves-light">Update Record</button>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>
                                             </div> 
                                             <!-- End Modal -->
-                                       
-                                       
+                                            ';
 
+                                            $houseModalMarkup[] = '
                                             <!-- /.modal to delete -->
                                             <div id="responsive-modal'.$row["houseID"].'" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true" style="display: none;">
                                                 <div class="modal-dialog">
@@ -647,13 +800,15 @@
                                                 </div>
                                             </div> 
                                             <!-- End Modal -->
+                                            ';
 
+                                            $houseModalMarkup[] = '
                                             <!-- /.modal to manage house photos -->
                                             <div id="responsive-modal_photos'.$i.'" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true" style="overflow-y:auto; display:none;">
                                                 <div class="modal-dialog modal-lg">
                                                     <div class="modal-content">
                                                         <div class="modal-header">
-                                                            <button type="button" class="close" data-dismiss="modal" aria-hidden="true">Ã—</button>
+                                                            <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
                                                             <h4 style="text-align:center;" class="modal-title">
                                                                 <i class="fa fa-camera fa-3x"></i> Beds / Partitions Photos for '.$row["house_name"].'
                                                             </h4>
@@ -696,7 +851,9 @@
                                                 </div>
                                             </div>
                                             <!-- End Modal -->
+                                            ';
 
+                                            $houseModalMarkup[] = '
                                             <!-- /.modal to manage house partitions -->
                                             <div id="responsive-modal_partitions'.$i.'" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true" style="overflow-y:auto; display:none;">
                                                 <div class="modal-dialog modal-lg">
@@ -716,16 +873,14 @@
                                                             <h4>All Partitions ('.$partitionCount.')</h4>
                                                             '.$partitionCards.'
                                                         </div>
-                                                        <div class="modal-footer">
+                                                        <div class="modal-body">
                                                             <button type="button" class="btn btn-default waves-effect" data-dismiss="modal">Close</button>
                                                         </div>
                                                     </div>
                                                 </div>
                                             </div>
                                             <!-- End Modal -->
-
-                                         </tr>
-                                    ';
+                                            ';
 
                                     }
 
@@ -733,6 +888,7 @@
                                     </tbody>
                                 </table>
                             </div>
+                            <?php echo implode("\n", $houseModalMarkup); ?>
                         </div>
                     </div>
                 </div>
@@ -810,12 +966,38 @@
         var photoPreviewOpen = false;
 
         $('.modal').removeClass('fade');
+        $('.modal .close').each(function() {
+            if ($(this).text().indexOf('Ã') !== -1) {
+                $(this)
+                    .attr('aria-label', 'Close')
+                    .html('<span aria-hidden="true">&times;</span>');
+            }
+        });
 
         $(document).on('hidden.bs.modal', '.modal', function() {
             if (!$('.modal:visible').length) {
                 $('.modal-backdrop').remove();
                 $('body').removeClass('modal-open').css('padding-right', '');
             }
+        });
+
+        function openHouseModal(targetSelector) {
+            if (!targetSelector) {
+                return;
+            }
+
+            var $targetModal = $(targetSelector);
+            if (!$targetModal.length) {
+                return;
+            }
+
+            $targetModal.modal('show');
+        }
+
+        $(document).on('click', '.js-house-edit-trigger, .js-house-delete-trigger, .js-house-photo-trigger', function(event) {
+            event.preventDefault();
+            event.stopPropagation();
+            openHouseModal($(this).data('target'));
         });
 
         function setPhotoPreviewImage(photoSrc, photoTitle) {
@@ -964,11 +1146,88 @@
             });
         });
     });
-    $('#example23').DataTable({
+    var savedHouseColumns = <?php echo $savedHouseColumnsJson; ?>;
+    var isMobileHouseView = window.matchMedia('(max-width: 767px)').matches;
+    if (isMobileHouseView) {
+        $('#example23').removeClass('nowrap');
+    }
+    var houseTable = $('#example23').DataTable({
         dom: 'Bfrtip',
         buttons: [
             'copy', 'csv', 'excel', 'pdf', 'print'
-        ]
+        ],
+        scrollX: !isMobileHouseView,
+        autoWidth: false
+    });
+
+    if (isMobileHouseView) {
+        houseTable.columns.adjust().draw(false);
+    }
+
+    if (Array.isArray(savedHouseColumns) && savedHouseColumns.length > 0) {
+        houseTable.columns().every(function(index) {
+            this.visible(savedHouseColumns.indexOf(index) !== -1);
+        });
+    }
+
+    function escapeHouseHtml(value) {
+        return $('<div>').text(value).html();
+    }
+
+    function renderHouseColumnToggles() {
+        var toggleHtml = '';
+        houseTable.columns().every(function(index) {
+            var headerText = $(this.header()).text().trim();
+            if (!headerText) {
+                return;
+            }
+            var checked = this.visible() ? 'checked' : '';
+            toggleHtml += '<li><a href="#" class="house-col-toggle" data-col="' + index + '"><label style="margin:0; font-weight:500; cursor:pointer;"><input type="checkbox" ' + checked + ' style="margin-right:8px;">' + escapeHouseHtml(headerText) + '</label></a></li>';
+        });
+        $('#house-column-toggles').html(toggleHtml);
+    }
+
+    renderHouseColumnToggles();
+
+    var houseColumnSaveTimer = null;
+    function saveHouseColumnPreference() {
+        var visibleColumns = [];
+        houseTable.columns().every(function(index) {
+            if (this.visible()) {
+                visibleColumns.push(index);
+            }
+        });
+
+        $.ajax({
+            url: 'functions/save_ui_columns.php',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                table_key: 'houses_view',
+                visible_columns: visibleColumns
+            })
+        });
+    }
+
+    function queueHouseColumnPreferenceSave() {
+        if (houseColumnSaveTimer) {
+            clearTimeout(houseColumnSaveTimer);
+        }
+        houseColumnSaveTimer = setTimeout(saveHouseColumnPreference, 220);
+    }
+
+    $('#house-column-toggles').on('click', '.house-col-toggle', function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        var columnIndex = parseInt($(this).data('col'), 10);
+        var column = houseTable.column(columnIndex);
+        var visibleCount = houseTable.columns(':visible').count();
+        if (column.visible() && visibleCount <= 1) {
+            return;
+        }
+        column.visible(!column.visible());
+        renderHouseColumnToggles();
+        queueHouseColumnPreferenceSave();
     });
     </script>
     <!--Style Switcher -->

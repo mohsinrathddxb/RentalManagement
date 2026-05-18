@@ -117,6 +117,45 @@
                 // Transactions are still saved in the database, but we no longer render
                 // them as fixed pop-up cards on the dashboard.
                 ?>
+                <style>
+                    @media (max-width: 767px) {
+                        .row-in .col-in {
+                            padding: 6px 4px;
+                        }
+                        .row-in .col-in h3 {
+                            font-size: 26px !important;
+                            margin-top: 8px !important;
+                        }
+                        .row-in .col-in h5 {
+                            font-size: 13px;
+                            margin-top: 6px;
+                        }
+                        .row-in .progress {
+                            margin-bottom: 8px;
+                        }
+                        .row-in p {
+                            font-size: 12px;
+                            margin-bottom: 0;
+                        }
+                        .w3-card-4 {
+                            padding: 0.2em !important;
+                        }
+                        .w3-card-4 .w3-white {
+                            border-radius: 0.8em !important;
+                            padding: 6px 2px;
+                        }
+                        .w3-card-4 h3 {
+                            font-size: 18px !important;
+                            line-height: 1.2;
+                            margin-top: 6px !important;
+                        }
+                        .w3-card-4 h5 {
+                            font-size: 12px;
+                            line-height: 1.35;
+                            margin-bottom: 4px;
+                        }
+                    }
+                </style>
 
                 <?php if (is_tenant_user() && $currentTenant) {
                     $tenantId = (int) $currentTenant['tenantID'];
@@ -303,16 +342,16 @@
                                         <div class="col-md-6 col-sm-6 col-xs-6"> <i class="fa fa-briefcase fa-5x"></i>
                                             <h5 class="text-muted vb">Month Collections (<?php echo date('Y-m')?>)</h5> </div>
                                          <div class="col-md-6 col-sm-6 col-xs-6">
-                                            <h3 class="counter text-right m-t-15 text-success" style="font-size: 2.2em;">
+                                            <h3 class="text-right m-t-15 text-success" style="font-size: 2.2em;">
                                                 <?php
                                                     $month=date('Y-m'); 
                                                     $total=0;
                                                     $sq_pay="SELECT `amountPaid`, `dateofPayment` from `payments` where `dateofPayment` like '%$month%'";
-                                                    $rec=mysqli_query($conn,$sq_pay);
-                                                    while ($row=mysqli_fetch_array($rec,MYSQLI_BOTH)) {
+                                                    $rec=mysqli_query($connection,$sq_pay);
+                                                    while ($rec && ($row=mysqli_fetch_array($rec,MYSQLI_BOTH))) {
                                                         $total+=$row['amountPaid'];
                                                     }
-                                                    echo "$total";
+                                                    echo number_format((float) $total, 2, '.', '');
                                                 ?>
                                                    <br> <span style="margin-top: 0.1em; font-size:0.5em"> (AED) </span>
                                                 </h3> 
@@ -331,15 +370,15 @@
                                         <div class="col-md-6 col-sm-6 col-xs-6"> <span style="font-size:2.2em; font-weight:700; line-height:1;">AED</span>
                                             <h5 class="text-muted vb">Pending Invoices</h5> </div>
                                          <div class="col-md-6 col-sm-6 col-xs-6">
-                                            <h3 class="counter text-right m-t-15 text-danger" style="font-size: 2.2em;">
+                                            <h3 class="text-right m-t-15 text-danger" style="font-size: 2.2em;">
                                                 <?php
                                                     $total=0;
                                                     $sq_pay="SELECT `amountDue`, `status` from `invoices` where `status`='unpaid'";
-                                                    $rec=mysqli_query($conn,$sq_pay);
-                                                    while ($row=mysqli_fetch_array($rec,MYSQLI_BOTH)) {
+                                                    $rec=mysqli_query($connection,$sq_pay);
+                                                    while ($rec && ($row=mysqli_fetch_array($rec,MYSQLI_BOTH))) {
                                                         $total+=$row['amountDue'];
                                                     }
-                                                    echo "$total";
+                                                    echo number_format((float) $total, 2, '.', '');
                                                 ?>
                                                    <br> <span style="margin-top: 0.1em; font-size:0.5em"> (AED) </span>
                                                 </h3> 
@@ -358,16 +397,16 @@
                                         <div class="col-md-6 col-sm-6 col-xs-6"> <span style="font-size:2.2em; font-weight:700; line-height:1;">AED</span>
                                             <h5 class="text-muted vb">Tenant Balances</h5> </div>
                                          <div class="col-md-6 col-sm-6 col-xs-6">
-                                            <h3 class="counter text-right m-t-15" style="font-size: 2.2em;color:orange;">
+                                            <h3 class="text-right m-t-15" style="font-size: 2.2em;color:orange;">
                                                 <?php
                                                    
                                                     $total=0;
                                                     $sq_pay="SELECT `amountDue`, `status` from `invoices` where `status`='paid'";
-                                                    $rec=mysqli_query($conn,$sq_pay);
-                                                    while ($row=mysqli_fetch_array($rec,MYSQLI_BOTH)) {
+                                                    $rec=mysqli_query($connection,$sq_pay);
+                                                    while ($rec && ($row=mysqli_fetch_array($rec,MYSQLI_BOTH))) {
                                                         $total+=$row['amountDue'];
                                                     }
-                                                    echo "$total";
+                                                    echo number_format((float) $total, 2, '.', '');
                                                 ?>
                                                    <br> <span style="margin-top: 0.1em; font-size:0.5em"> (AED) </span>
                                                 </h3> 
@@ -386,16 +425,16 @@
                                         <div class="col-md-6 col-sm-6 col-xs-6"> <i class="fa fa-home fa-5x"></i>
                                             <h5 class="text-muted vb">Rentable Units</h5> </div>
                                          <div class="col-md-6 col-sm-6 col-xs-6">
-                                            <h3 class="counter text-right m-t-15 text-info" style="font-size: 2.2em;">
+                                            <h3 class="text-right m-t-15 text-info" style="font-size: 2.2em;">
                                                 <?php
                                                    
                                                     $total=0;
                                                     $sq_pay="SELECT `number_of_rooms`,`house_status` from `houses` where `house_status`='Vacant'";
-                                                    $rec=mysqli_query($conn,$sq_pay);
-                                                    while ($row=mysqli_fetch_array($rec,MYSQLI_BOTH)) {
+                                                    $rec=mysqli_query($connection,$sq_pay);
+                                                    while ($rec && ($row=mysqli_fetch_array($rec,MYSQLI_BOTH))) {
                                                         $total+=$row['number_of_rooms'];
                                                     }
-                                                    echo "$total";
+                                                    echo (int) $total;
                                                 ?>
                                                    <br> <span style="margin-top: 0.1em; font-size:0.5em"> (Units) </span>
                                                 </h3> 
@@ -420,31 +459,27 @@
                             <h3 style="text-align: center;">Latest Transactions</h3>
                             <div class="row row-in">
 
-                             <div style="overflow-x:auto; overflow-y:auto; max-width:80%; max-height:400px; margin-right:auto;margin-left:auto;">
-                                <table class="table w3-card-4 w3-table w3-bordered w3-striped table-responsive " id="rates" style="border:0.2em solid white;">
+                             <div class="latest-transactions-wrap">
+                                <table class="table table-striped table-hover latest-transactions-table" id="rates">
+                                    <thead>
                                     <tr>
                                         <th>Actor</th>
                                         <th>Action Description</th>
                                         <th>Time</th>
-                                        </tr>
+                                    </tr>
+                                    </thead>
+                                    <tbody>
                                         <?php
                                             $sq_trans="SELECT * from `transactions` order by `id` desc limit 10";
                                             $rec=mysqli_query($conn,$sq_trans);
-                                            $i=1; //for coloring
                                             while ($row=mysqli_fetch_array($rec,MYSQLI_BOTH)) 
                                             {
-                                                $actor=$row['actor'];
-                                                $description=$row['description'];
-                                                $time=$row['time'];
-
-                                                $color='w3-blue';
-                                                if ($i%2==0) {
-                                                    $color='w3-grey';
-                                                }
-                                                $i++;
+                                                $actor=htmlspecialchars((string) $row['actor'], ENT_QUOTES, 'UTF-8');
+                                                $description=htmlspecialchars((string) $row['description'], ENT_QUOTES, 'UTF-8');
+                                                $time=htmlspecialchars((string) $row['time'], ENT_QUOTES, 'UTF-8');
 
                                                 echo "
-                                                <tr class='$color'>
+                                                <tr>
                                                     <td>$actor</td>
                                                     <td>$description</td>
                                                     <td>$time</td>
@@ -452,8 +487,7 @@
                                                 ";
                                             }
                                         ?>
-                                    
-
+                                    </tbody>
                                 </table>
                              </div>
 

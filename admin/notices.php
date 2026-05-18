@@ -131,7 +131,7 @@ if (is_logged_in_temporary()) {
             LEFT JOIN `tenants` t ON tn.`tenant_id` = t.`tenantID`
             LEFT JOIN `houses` h ON t.`houseNumber` = h.`houseID`
             LEFT JOIN `house_partitions` hp ON t.`partition_id` = hp.`partition_id`
-            ORDER BY tn.`updated_at` DESC, tn.`notice_id` DESC
+            ORDER BY COALESCE(tn.`updated_at`, tn.`created_at`) DESC, tn.`notice_id` DESC
         ";
 
         $tenantRecipients = mysqli_query($connection, "
@@ -149,7 +149,7 @@ if (is_logged_in_temporary()) {
         ");
     } else {
         $tenantId = (int) $currentTenant['tenantID'];
-        $sql = "SELECT * FROM `tenant_notices` WHERE `tenant_id`='$tenantId' ORDER BY `updated_at` DESC, `notice_id` DESC";
+        $sql = "SELECT * FROM `tenant_notices` WHERE `tenant_id`='$tenantId' ORDER BY COALESCE(`updated_at`, `created_at`) DESC, `notice_id` DESC";
     }
 
     $notices = mysqli_query($connection, $sql);
@@ -179,12 +179,94 @@ if (is_logged_in_temporary()) {
             <div class="alert alert-success"><strong>UPDATED!!</strong> Notice response saved.</div>
         <?php } ?>
 
+        <style>
+            .notices-page .white-box {
+                padding: 24px;
+            }
+            .create-notice-row {
+                display: grid;
+                grid-template-columns: 460px minmax(560px, 1fr);
+                gap: 16px;
+                align-items: end;
+            }
+            .create-recipient-field,
+            .create-subject-field {
+                width: 100%;
+                min-width: 0;
+            }
+            .create-recipient-field {
+                min-width: 280px;
+            }
+            .create-recipient-field select.form-control {
+                min-width: 280px;
+            }
+            .create-notice-row .form-control {
+                width: 100% !important;
+                height: 48px !important;
+                min-height: 48px !important;
+                font-size: 16px !important;
+            }
+            .create-notice-row textarea.form-control {
+                min-height: 110px !important;
+                height: 110px !important;
+                resize: vertical;
+            }
+            .create-notice-row .btn.btn-success {
+                min-height: 48px;
+                padding: 10px 18px;
+                font-size: 15px;
+            }
+            .notice-edit-row {
+                display: grid;
+                grid-template-columns: 240px minmax(320px, 1fr) 170px;
+                gap: 12px;
+                align-items: flex-end;
+            }
+            .notice-edit-field {
+                min-width: 0;
+            }
+            .notice-edit-actions {
+                width: 170px;
+            }
+            .notice-edit-field .form-control {
+                width: 100% !important;
+                height: 44px !important;
+                min-height: 44px !important;
+                padding-top: 10px !important;
+                padding-bottom: 10px !important;
+                line-height: 1.2 !important;
+            }
+            @media (max-width: 991px) {
+                .create-notice-row {
+                    grid-template-columns: 1fr;
+                }
+                .notice-edit-row {
+                    grid-template-columns: 1fr;
+                }
+                .notice-edit-actions {
+                    width: 100%;
+                }
+            }
+            @media (max-width: 767px) {
+                .notices-page .white-box {
+                    padding: 16px 14px;
+                }
+                .notices-page .box-title {
+                    line-height: 1.35;
+                }
+                .create-notice-row .btn.btn-success,
+                .notice-edit-actions .btn {
+                    width: 100%;
+                }
+            }
+        </style>
+
         <?php if ($canManageNotices) { ?>
-        <div class="white-box">
+        <div class="white-box notices-page">
             <h3 class="box-title">Create Notice For Tenant</h3>
             <form action="notices.php" method="post">
-                <div class="row">
-                    <div class="form-group col-md-4">
+                <div class="row create-notice-row">
+                    <div class="form-group col-md-4 create-recipient-field">
                         <label>Recipient: *</label>
                         <select name="recipient_tenant" class="form-control" required>
                             <option value="">Select tenant</option>
@@ -205,7 +287,7 @@ if (is_logged_in_temporary()) {
                             ?>
                         </select>
                     </div>
-                    <div class="form-group col-md-8">
+                    <div class="form-group col-md-8 create-subject-field">
                         <label>Subject: *</label>
                         <input type="text" name="subject" class="form-control" required>
                     </div>
@@ -220,7 +302,7 @@ if (is_logged_in_temporary()) {
             </form>
         </div>
         <?php } else { ?>
-        <div class="white-box">
+        <div class="white-box notices-page">
             <h3 class="box-title">Send Notice To Admin</h3>
             <form action="notices.php" method="post">
                 <div class="row">
@@ -240,12 +322,13 @@ if (is_logged_in_temporary()) {
         </div>
         <?php } ?>
 
-        <div class="white-box">
+        <div class="white-box notices-page">
             <h3 class="box-title"><?php echo $canManageNotices ? 'Notice Inbox' : 'My Sent Notices'; ?></h3>
             <?php
             if (!$notices || mysqli_num_rows($notices) === 0) {
                 echo '<i style="color:brown;">No notices yet.</i>';
             } else {
+                echo '<div class="notice-list-wrap">';
                 while ($row = mysqli_fetch_assoc($notices)) {
                     $noticeId = (int) $row['notice_id'];
                     $subject = htmlspecialchars($row['subject'], ENT_QUOTES, 'UTF-8');
@@ -271,25 +354,35 @@ if (is_logged_in_temporary()) {
                     }
 
                     echo '
-                        <div style="border:1px solid #e4e7ea; padding:15px; margin-bottom:15px;">
-                            <h4>'.$subject.' <span class="label label-info" style="margin-left:8px;">'.$status.'</span></h4>
-                            '.($canManageNotices
-                                ? '<p><strong>Direction:</strong> '.($senderRole === 'Admin' ? 'Admin to Tenant' : 'Tenant to Admin').'</p>
-                                   <p><strong>Tenant:</strong> '.htmlspecialchars((string) $row['tenant_name'], ENT_QUOTES, 'UTF-8').' ('.htmlspecialchars((string) $row['email'], ENT_QUOTES, 'UTF-8').')</p>
-                                   <p><strong>Stay:</strong> '.htmlspecialchars((string) $row['house_name'], ENT_QUOTES, 'UTF-8').' / '.htmlspecialchars((string) $row['partition_number'], ENT_QUOTES, 'UTF-8').'</p>'
-                                : '<p><strong>From:</strong> '.($senderRole === 'Admin' ? ($createdByName !== '' ? $createdByName : 'Admin') : 'You').'</p>').'
-                            <p><strong>Message:</strong><br>'.$message.'</p>
-                            '.($documentsHtml !== '' ? '<p><strong>Documents:</strong><br>'.$documentsHtml.'</p>' : '').'
-                            '.($reply !== '' ? '<p><strong>Admin Reply:</strong> '.$reply.'</p>' : '').'
-                            <p><strong>Updated:</strong> '.htmlspecialchars($row['updated_at'], ENT_QUOTES, 'UTF-8').'</p>
+                        <div style="border:1px solid #e4e7ea; border-radius:8px; padding:12px 14px; margin-bottom:12px;">
+                            <div class="row" style="margin-bottom:8px;">
+                                <div class="col-md-7 col-sm-7 col-xs-12">
+                                    <h4 style="margin:0;">'.$subject.' <span class="label label-info" style="margin-left:8px;">'.$status.'</span></h4>
+                                </div>
+                                <div class="col-md-5 col-sm-5 col-xs-12 text-right">
+                                    <strong>Updated:</strong> '.htmlspecialchars((string) $row['updated_at'], ENT_QUOTES, 'UTF-8').'
+                                </div>
+                            </div>
+                            <div class="row" style="margin-bottom:8px;">
+                                <div class="col-md-12">
+                                    '.($canManageNotices
+                                        ? '<strong>Direction:</strong> '.($senderRole === 'Admin' ? 'Admin to Tenant' : 'Tenant to Admin')
+                                          .' &nbsp; | &nbsp; <strong>Tenant:</strong> '.htmlspecialchars((string) $row['tenant_name'], ENT_QUOTES, 'UTF-8').' ('.htmlspecialchars((string) $row['email'], ENT_QUOTES, 'UTF-8').')'
+                                          .' &nbsp; | &nbsp; <strong>Stay:</strong> '.htmlspecialchars((string) $row['house_name'], ENT_QUOTES, 'UTF-8').' / '.htmlspecialchars((string) $row['partition_number'], ENT_QUOTES, 'UTF-8')
+                                        : '<strong>From:</strong> '.($senderRole === 'Admin' ? ($createdByName !== '' ? $createdByName : 'Admin') : 'You')).'
+                                </div>
+                            </div>
+                            <div style="margin-bottom:8px;"><strong>Message:</strong> '.$message.'</div>
+                            '.($documentsHtml !== '' ? '<div style="margin-bottom:8px;"><strong>Documents:</strong> '.$documentsHtml.'</div>' : '').'
+                            '.($reply !== '' ? '<div style="margin-bottom:8px;"><strong>Admin Reply:</strong> '.$reply.'</div>' : '').'
                     ';
 
                     if ($canManageNotices && $senderRole !== 'Admin') {
                         echo '
                             <form action="notices.php" method="post">
                                 <input type="hidden" name="notice_id" value="'.$noticeId.'">
-                                <div class="row">
-                                    <div class="form-group col-md-3">
+                                <div class="notice-edit-row">
+                                    <div class="form-group notice-edit-field">
                                         <label>Status</label>
                                         <select name="status" class="form-control">
                                             <option value="'.$status.'" selected>'.$status.'</option>
@@ -298,11 +391,11 @@ if (is_logged_in_temporary()) {
                                             <option value="Closed">Closed</option>
                                         </select>
                                     </div>
-                                    <div class="form-group col-md-7">
+                                    <div class="form-group notice-edit-field">
                                         <label>Reply</label>
                                         <input type="text" name="admin_reply" class="form-control" value="'.$reply.'" placeholder="Reply to tenant">
                                     </div>
-                                    <div class="form-group col-md-2">
+                                    <div class="form-group notice-edit-actions">
                                         <label>&nbsp;</label>
                                         <button type="submit" name="replyNotice" class="btn btn-success btn-block">Save</button>
                                     </div>
@@ -313,8 +406,8 @@ if (is_logged_in_temporary()) {
                         echo '
                             <form action="notices.php" method="post">
                                 <input type="hidden" name="notice_id" value="'.$noticeId.'">
-                                <div class="row">
-                                    <div class="form-group col-md-3">
+                                <div class="notice-edit-row">
+                                    <div class="form-group notice-edit-field">
                                         <label>Status</label>
                                         <select name="status" class="form-control">
                                             <option value="'.$status.'" selected>'.$status.'</option>
@@ -322,11 +415,11 @@ if (is_logged_in_temporary()) {
                                             <option value="Closed">Closed</option>
                                         </select>
                                     </div>
-                                    <div class="form-group col-md-7">
+                                    <div class="form-group notice-edit-field">
                                         <label>Admin Note</label>
                                         <input type="text" name="admin_reply" class="form-control" value="'.$reply.'" placeholder="Optional internal note or update">
                                     </div>
-                                    <div class="form-group col-md-2">
+                                    <div class="form-group notice-edit-actions">
                                         <label>&nbsp;</label>
                                         <button type="submit" name="replyNotice" class="btn btn-success btn-block">Save</button>
                                     </div>
@@ -337,6 +430,7 @@ if (is_logged_in_temporary()) {
 
                     echo '</div>';
                 }
+                echo '</div>';
             }
             ?>
         </div>

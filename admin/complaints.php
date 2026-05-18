@@ -176,7 +176,15 @@
                 LEFT JOIN `tenants` t ON tc.`tenant_id` = t.`tenantID`
                 LEFT JOIN `houses` h ON tc.`house_id` = h.`houseID`
                 LEFT JOIN `house_partitions` hp ON tc.`partition_id` = hp.`partition_id`
-                ORDER BY tc.`updated_at` DESC
+                ORDER BY
+                    CASE
+                        WHEN LOWER(tc.`status`) IN ('open', 'reopened') THEN 0
+                        WHEN LOWER(tc.`status`) = 'in progress' THEN 1
+                        WHEN LOWER(tc.`status`) = 'resolved' THEN 2
+                        WHEN LOWER(tc.`status`) = 'rejected' THEN 3
+                        ELSE 4
+                    END ASC,
+                    tc.`updated_at` DESC
             ";
         } else {
             $tenantId = (int) $currentTenant['tenantID'];
@@ -186,7 +194,15 @@
                 LEFT JOIN `houses` h ON tc.`house_id` = h.`houseID`
                 LEFT JOIN `house_partitions` hp ON tc.`partition_id` = hp.`partition_id`
                 WHERE tc.`tenant_id`='$tenantId'
-                ORDER BY tc.`updated_at` DESC
+                ORDER BY
+                    CASE
+                        WHEN LOWER(tc.`status`) IN ('open', 'reopened') THEN 0
+                        WHEN LOWER(tc.`status`) = 'in progress' THEN 1
+                        WHEN LOWER(tc.`status`) = 'resolved' THEN 2
+                        WHEN LOWER(tc.`status`) = 'rejected' THEN 3
+                        ELSE 4
+                    END ASC,
+                    tc.`updated_at` DESC
             ";
         }
         $complaints = mysqli_query($connection, $sql);

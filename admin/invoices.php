@@ -8,6 +8,7 @@ ob_start();
 require_once "functions/db.php";
 require_once "functions/tenant_helpers.php";
 require_once "functions/invoice_pdf_helpers.php";
+require_once "functions/ui_column_preferences.php";
 
 session_start();
 
@@ -20,6 +21,7 @@ if (is_logged_in_temporary()) {
     $canManageInvoices = is_admin_user();
     ensure_tenant_schema($connection);
     ensure_invoice_pdf_columns($connection);
+    ensure_ui_column_preferences_schema($connection);
     $currentTenant = get_logged_in_tenant_record();
 
     if ($canManageInvoices) {
@@ -71,6 +73,8 @@ if (is_logged_in_temporary()) {
     }
 
     $query = mysqli_query($connection, $sql);
+    $savedInvoiceColumns = get_ui_visible_columns($connection, $_SESSION['email'], 'invoices_view');
+    $savedInvoiceColumnsJson = json_encode(is_array($savedInvoiceColumns) ? $savedInvoiceColumns : []);
 
     require "admin_header0.php";
     require "admin_left_panel.php";
@@ -104,9 +108,23 @@ if (is_logged_in_temporary()) {
                         echo '<div class="alert alert-danger"><a href="#" class="close" data-dismiss="alert" aria-label="close"></a><strong>ERROR!! </strong><p>There was an error during the deletion of this invoice. Please try again.</p></div>';
                     }
                     ?>
+                    <style>
+                        @media (max-width: 767px) {
+                            #example23 { width: 100% !important; }
+                            #example23 th, #example23 td { white-space: normal !important; font-size: 11px; line-height: 1.35; padding: 8px 6px !important; }
+                        }
+                    </style>
 
                     <h3 class="box-title m-b-0">Current Invoice listing ( <x style="color: orange;"><?php echo mysqli_num_rows($query);?></x> )</h3>
                     <p class="text-muted m-b-30">Export data to Copy, CSV, Excel, PDF & Print</p>
+                    <div class="m-b-15">
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-default btn-sm dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                Columns <span class="caret"></span>
+                            </button>
+                            <ul class="dropdown-menu" id="invoice-column-toggles"></ul>
+                        </div>
+                    </div>
 
                     <div class="table-responsive">
                         <table id="example23" class="display nowrap" cellspacing="0" width="100%">
@@ -117,29 +135,29 @@ if (is_logged_in_temporary()) {
                                 echo '
                                 <thead>
                                     <tr>
-                                        <th>Invoice Id</th>
                                         <th>Tenant</th>
-                                        <th>Phone Number</th>
+                                        <th>Invoice status</th>
                                         <th>Amount</th>
+                                        <th>Documents</th>
+                                        <th>Invoice Id</th>
+                                        <th>Phone Number</th>
                                         <th>Date of Invoice</th>
                                         <th>Due Date</th>
-                                        <th>Invoice status</th>
                                         <th>Comments</th>
-                                        <th>Documents</th>
                                         '.($canManageInvoices ? '<th>Actions</th>' : '').'
                                     </tr>
                                 </thead>
                                 <tfoot>
                                     <tr>
-                                        <th>Invoice Id</th>
                                         <th>Tenant</th>
-                                        <th>Phone Number</th>
+                                        <th>Invoice status</th>
                                         <th>Amount</th>
+                                        <th>Documents</th>
+                                        <th>Invoice Id</th>
+                                        <th>Phone Number</th>
                                         <th>Date of Invoice</th>
                                         <th>Due Date</th>
-                                        <th>Invoice status</th>
                                         <th>Comments</th>
-                                        <th>Documents</th>
                                         '.($canManageInvoices ? '<th>Actions</th>' : '').'
                                     </tr>
                                 </tfoot>
@@ -168,15 +186,15 @@ if (is_logged_in_temporary()) {
 
                                 echo '
                                 <tr>
-                                    <td>'.$row["invoiceNumber"].'</td>
                                     <td>'.$row["tenant_name"].'</td>
-                                    <td>'.$row["phone_number"].'</td>
+                                    <td>'.$statusLabel.'</td>
                                     <td>'.format_money_amount($row["amountDue"]).'</td>
+                                    <td>'.$invoiceLink.$receiptLink.'</td>
+                                    <td>'.$row["invoiceNumber"].'</td>
+                                    <td>'.$row["phone_number"].'</td>
                                     <td>'.$row["dateOfInvoice"].'</td>
                                     <td>'.$row["dateDue"].'</td>
-                                    <td>'.$statusLabel.'</td>
                                     <td>'.$row["comment"].'</td>
-                                    <td>'.$invoiceLink.$receiptLink.'</td>
                                     '.($canManageInvoices ? '<td><a href="#"><i class="fa fa-trash" data-toggle="modal" data-target="#responsive-modal'.$row["invoiceNumber"].'" title="delete" style="color:red;"></i></a></td>' : '').'
 
                                     '.($canManageInvoices ? '
@@ -224,9 +242,86 @@ if (is_logged_in_temporary()) {
     </div>
     <?php require "admin_footer.php"; ?>
     <script>
-    $('#example23').DataTable({
+    var savedInvoiceColumns = <?php echo $savedInvoiceColumnsJson; ?>;
+    var isMobileInvoiceView = window.matchMedia('(max-width: 767px)').matches;
+    if (isMobileInvoiceView) {
+        $('#example23').removeClass('nowrap');
+    }
+    var invoiceTable = $('#example23').DataTable({
         dom: 'Bfrtip',
-        buttons: ['copy', 'csv', 'excel', 'pdf', 'print']
+        buttons: ['copy', 'csv', 'excel', 'pdf', 'print'],
+        scrollX: !isMobileInvoiceView,
+        autoWidth: false
+    });
+
+    if (isMobileInvoiceView) {
+        invoiceTable.columns.adjust().draw(false);
+    }
+
+    if (Array.isArray(savedInvoiceColumns) && savedInvoiceColumns.length > 0) {
+        invoiceTable.columns().every(function(index) {
+            this.visible(savedInvoiceColumns.indexOf(index) !== -1);
+        });
+    }
+
+    function escapeInvoiceHtml(value) {
+        return $('<div>').text(value).html();
+    }
+
+    function renderInvoiceColumnToggles() {
+        var toggleHtml = '';
+        invoiceTable.columns().every(function(index) {
+            var headerText = $(this.header()).text().trim();
+            if (!headerText) {
+                return;
+            }
+            var checked = this.visible() ? 'checked' : '';
+            toggleHtml += '<li><a href="#" class="invoice-col-toggle" data-col="' + index + '"><label style="margin:0; font-weight:500; cursor:pointer;"><input type="checkbox" ' + checked + ' style="margin-right:8px;">' + escapeInvoiceHtml(headerText) + '</label></a></li>';
+        });
+        $('#invoice-column-toggles').html(toggleHtml);
+    }
+
+    renderInvoiceColumnToggles();
+
+    var invoiceColumnSaveTimer = null;
+    function saveInvoiceColumnPreference() {
+        var visibleColumns = [];
+        invoiceTable.columns().every(function(index) {
+            if (this.visible()) {
+                visibleColumns.push(index);
+            }
+        });
+
+        $.ajax({
+            url: 'functions/save_ui_columns.php',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                table_key: 'invoices_view',
+                visible_columns: visibleColumns
+            })
+        });
+    }
+
+    function queueInvoiceColumnPreferenceSave() {
+        if (invoiceColumnSaveTimer) {
+            clearTimeout(invoiceColumnSaveTimer);
+        }
+        invoiceColumnSaveTimer = setTimeout(saveInvoiceColumnPreference, 220);
+    }
+
+    $('#invoice-column-toggles').on('click', '.invoice-col-toggle', function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        var columnIndex = parseInt($(this).data('col'), 10);
+        var column = invoiceTable.column(columnIndex);
+        var visibleCount = invoiceTable.columns(':visible').count();
+        if (column.visible() && visibleCount <= 1) {
+            return;
+        }
+        column.visible(!column.visible());
+        renderInvoiceColumnToggles();
+        queueInvoiceColumnPreferenceSave();
     });
     </script>
     <script src="../plugins/bower_components/styleswitcher/jQuery.style.switcher.js"></script>

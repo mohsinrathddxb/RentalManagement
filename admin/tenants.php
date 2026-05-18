@@ -10,6 +10,7 @@ require_once "functions/partition_helpers.php";
 require_once "functions/tenant_helpers.php";
 require_once "functions/telegram_helpers.php";
 require_once "functions/country_options.php";
+require_once "functions/ui_column_preferences.php";
 
 session_start();
 
@@ -22,6 +23,7 @@ if (is_logged_in_temporary()) {
     require_admin_user();
     ensure_partition_tables($connection);
     ensure_tenant_schema($connection);
+    ensure_ui_column_preferences_schema($connection);
 
     $canManageTenants = true;
     $deleteErrorTenantId = isset($_GET["delete_error_tenant"]) ? (int) $_GET["delete_error_tenant"] : 0;
@@ -66,6 +68,8 @@ if (is_logged_in_temporary()) {
     ";
 
     $query = mysqli_query($connection, $sql);
+    $savedTenantColumns = get_ui_visible_columns($connection, $_SESSION['email'], 'tenants_view');
+    $savedTenantColumnsJson = json_encode(is_array($savedTenantColumns) ? $savedTenantColumns : []);
 
     require "admin_header0.php";
     require "admin_left_panel.php";
@@ -119,9 +123,42 @@ if (is_logged_in_temporary()) {
                         echo '<div class="alert alert-danger"><a href="#" class="close" data-dismiss="alert" aria-label="close"></a><strong>DELETE NOT COMPLETED!! </strong><p>Please correct the exit date inside the tenant delete popup and try again.</p></div>';
                     }
                     ?>
+                    <style>
+                        .tenant-name-actions { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+                        .tenant-name-link { font-weight:600; margin-right:2px; }
+                        .btn-icon-only { min-width:28px; width:28px; height:28px; padding:0 !important; display:inline-flex !important; align-items:center; justify-content:center; font-size:12px !important; line-height:1; }
+                        .btn-icon-only i { display:inline-block !important; font-size:12px !important; line-height:1; }
+                        [id^="edit-modal"] .modal-dialog { width:min(680px, 92vw); }
+                        [id^="edit-modal"] .modal-header,
+                        [id^="edit-modal"] .modal-body { background:#071A2D; color:#fffdf8; }
+                        [id^="edit-modal"] .modal-header { border-bottom:1px solid rgba(200,164,73,.35); }
+                        [id^="edit-modal"] .close { color:#fff; opacity:1; }
+                        [id^="edit-modal"] .form-control,
+                        [id^="edit-modal"] select,
+                        [id^="edit-modal"] option { color:#071A2D !important; background:#fffdf8 !important; }
+                        [id^="edit-modal"] .input-group-addon { background:#f6f2e8 !important; border-color:rgba(200,164,73,.4) !important; color:#071A2D !important; }
+                        [id^="edit-modal"] .input-group-addon i { color:#071A2D !important; }
+                        @media (max-width: 767px) {
+                            #example23 { width:100% !important; }
+                            #example23 th, #example23 td { white-space:normal !important; font-size:11px; line-height:1.35; padding:8px 6px !important; }
+                            .tenant-name-link { width:100%; margin-bottom:4px; }
+                            .tenant-name-actions { align-items:flex-start; }
+                            .tenant-name-actions form,
+                            .tenant-name-actions a.btn-icon-only { display:inline-flex !important; }
+                            [id^="edit-modal"] .modal-dialog { width:auto; margin:10px; }
+                        }
+                    </style>
 
                     <h3 class="box-title m-b-0">Current tenants listing ( <x style="color: orange;"><?php echo @mysqli_num_rows($query); ?></x> )</h3>
                     <p class="text-muted m-b-30">Export data to Copy, CSV, Excel, PDF & Print</p>
+                    <div class="m-b-15">
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-default btn-sm dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                Columns <span class="caret"></span>
+                            </button>
+                            <ul class="dropdown-menu" id="tenant-column-toggles"></ul>
+                        </div>
+                    </div>
 
                     <div class="table-responsive">
                         <table id="example23" class="display nowrap" cellspacing="0" width="100%">
@@ -193,25 +230,25 @@ if (is_logged_in_temporary()) {
                                 echo '
                                 <tr>
                                     <td>' . ($canManageTenants ? '
-                                        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                                            <a href="#" data-toggle="modal" data-target="#edit-modal' . $row["tenantID"] . '" title="Edit ' . $row["tenant_name"] . '\'s details" style="color:#03a9f3; font-weight:600;">
+                                        <div class="tenant-name-actions">
+                                            <a href="#" class="tenant-name-link" data-toggle="modal" data-target="#edit-modal' . $row["tenantID"] . '" title="Edit ' . $row["tenant_name"] . '\'s details" style="color:#03a9f3; font-weight:600;">
                                                 ' . $row["tenant_name"] . '
                                             </a>
-                                            <a href="notices.php?tenant_id=' . $row["tenantID"] . '" class="btn btn-info btn-xs" title="Create notice for ' . $row["tenant_name"] . '">
-                                                <i class="fa fa-envelope"></i> Notice
+                                            <a href="notices.php?tenant_id=' . $row["tenantID"] . '" class="btn btn-info btn-xs btn-icon-only" title="Create notice for ' . $row["tenant_name"] . '">
+                                                <i class="fa fa-envelope"></i>
                                             </a>
                                             <form action="functions/telegram_tenant_actions.php" method="post" style="display:inline-block; margin:0;">
                                                 <input type="hidden" name="tenant_id" value="' . (int) $row["tenantID"] . '">
                                                 <input type="hidden" name="telegram_action" value="fetch_chat_id">
-                                                <button type="submit" class="btn btn-default btn-xs" title="Fetch Telegram chat ID for ' . $row["tenant_name"] . '">
-                                                    <i class="fa fa-download"></i> TG ID
+                                                <button type="submit" class="btn btn-default btn-xs btn-icon-only" title="Fetch Telegram chat ID for ' . $row["tenant_name"] . '">
+                                                    <i class="fa fa-download"></i>
                                                 </button>
                                             </form>
                                             <form action="functions/telegram_tenant_actions.php" method="post" style="display:inline-block; margin:0;">
                                                 <input type="hidden" name="tenant_id" value="' . (int) $row["tenantID"] . '">
                                                 <input type="hidden" name="telegram_action" value="send_test">
-                                                <button type="submit" class="btn btn-primary btn-xs" title="Send Telegram test to ' . $row["tenant_name"] . '">
-                                                    <i class="fa fa-paper-plane"></i> TG Test
+                                                <button type="submit" class="btn btn-primary btn-xs btn-icon-only" title="Send Telegram test to ' . $row["tenant_name"] . '">
+                                                    <i class="fa fa-paper-plane"></i>
                                                 </button>
                                             </form>
                                         </div>
@@ -237,9 +274,9 @@ if (is_logged_in_temporary()) {
                                     <td>' . $row["agreement_file"] . '</td>
                                     ' . ($canManageTenants ? '
                                     <td>
-                                        <a href="#"><i class="fa fa-trash" data-toggle="modal" data-target="#responsive-modal' . $row["tenantID"] . '" title="Delete ' . $row["tenant_name"] . '" style="color:red;"></i></a>
+                                        <a href="#" data-toggle="modal" data-target="#responsive-modal' . $row["tenantID"] . '" title="Delete ' . $row["tenant_name"] . '"><i class="fa fa-trash" style="color:red;"></i></a>
                                         ||
-                                        <a href="#"><i class="fa fa-edit" data-toggle="modal" data-target="#edit-modal' . $row["tenantID"] . '" title="Edit ' . $row["tenant_name"] . '\'s details" style="color:#1332d9;"></i></a>
+                                        <a href="#" data-toggle="modal" data-target="#edit-modal' . $row["tenantID"] . '" title="Edit ' . $row["tenant_name"] . '\'s details"><i class="fa fa-edit" style="color:#1332d9;"></i></a>
                                     </td>
                                     ' : '') . '
                                 ' . ($canManageTenants ? '
@@ -389,7 +426,7 @@ if (is_logged_in_temporary()) {
 
                                                             <input type="hidden" name="ten_id" value="' . $row["tenantID"] . '">
 
-                                                            <button type="submit" name="editTenant" class="btn btn-success btn-lg waves-effect waves-light m-r-10 center"><i class="fa fa-plus-circle fa-lg"></i> Update</button>
+                                                            <button type="submit" name="editTenant" class="btn btn-success btn-lg waves-effect waves-light m-r-10 center">Update</button>
                                                         </form>
                                                     </div>
                                                 </div>
@@ -441,9 +478,105 @@ if (is_logged_in_temporary()) {
     </div>
     <?php require "admin_footer.php"; ?>
     <script>
-    $('#example23').DataTable({
+    $('[id^="edit-modal"] .modal-header').each(function() {
+        if ($(this).find('.close').length === 0) {
+            $(this).prepend('<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>');
+        }
+        if ($(this).find('.modal-title').length === 0) {
+            $(this).prepend('<h4 class="modal-title">Edit Tenant Details</h4>');
+        }
+    });
+
+    $('[id^="responsive-modal"] .close, [id^="edit-modal"] .close').html('&times;');
+    $(document).on('click', '[id^="responsive-modal"] .close, [id^="edit-modal"] .close, [id^="responsive-modal"] [data-dismiss="modal"], [id^="edit-modal"] [data-dismiss="modal"]', function(event) {
+        event.preventDefault();
+        $(this).closest('.modal').modal('hide');
+    });
+
+    var savedTenantColumns = <?php echo $savedTenantColumnsJson; ?>;
+    var isMobileTenantView = window.matchMedia('(max-width: 767px)').matches;
+    if (isMobileTenantView) {
+        $('#example23').removeClass('nowrap');
+    }
+    var tenantTable = $('#example23').DataTable({
         dom: 'Bfrtip',
-        buttons: ['copy', 'csv', 'excel', 'pdf', 'print']
+        buttons: ['copy', 'csv', 'excel', 'pdf', 'print'],
+        scrollX: !isMobileTenantView,
+        autoWidth: false,
+        columnDefs: [
+            { targets: 0, width: '260px' },
+            { targets: 2, width: '90px', className: 'tenant-partition-col' }
+        ]
+    });
+
+    if (isMobileTenantView) {
+        tenantTable.columns.adjust().draw(false);
+    }
+
+    if (Array.isArray(savedTenantColumns) && savedTenantColumns.length > 0) {
+        tenantTable.columns().every(function(index) {
+            this.visible(savedTenantColumns.indexOf(index) !== -1);
+        });
+    }
+
+    function escapeHtml(value) {
+        return $('<div>').text(value).html();
+    }
+
+    function renderTenantColumnToggles() {
+        var toggleHtml = '';
+        tenantTable.columns().every(function(index) {
+            var headerText = $(this.header()).text().trim();
+            if (!headerText) {
+                return;
+            }
+            var checked = this.visible() ? 'checked' : '';
+            toggleHtml += '<li><a href="#" class="tenant-col-toggle" data-col="' + index + '"><label style="margin:0; font-weight:500; cursor:pointer;"><input type="checkbox" ' + checked + ' style="margin-right:8px;">' + escapeHtml(headerText) + '</label></a></li>';
+        });
+        $('#tenant-column-toggles').html(toggleHtml);
+    }
+
+    renderTenantColumnToggles();
+
+    var tenantColumnSaveTimer = null;
+    function saveTenantColumnPreference() {
+        var visibleColumns = [];
+        tenantTable.columns().every(function(index) {
+            if (this.visible()) {
+                visibleColumns.push(index);
+            }
+        });
+
+        $.ajax({
+            url: 'functions/save_ui_columns.php',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                table_key: 'tenants_view',
+                visible_columns: visibleColumns
+            })
+        });
+    }
+
+    function queueTenantColumnPreferenceSave() {
+        if (tenantColumnSaveTimer) {
+            clearTimeout(tenantColumnSaveTimer);
+        }
+        tenantColumnSaveTimer = setTimeout(saveTenantColumnPreference, 220);
+    }
+
+    $('#tenant-column-toggles').on('click', '.tenant-col-toggle', function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        var columnIndex = parseInt($(this).data('col'), 10);
+        var column = tenantTable.column(columnIndex);
+        var visibleCount = tenantTable.columns(':visible').count();
+        if (column.visible() && visibleCount <= 1) {
+            return;
+        }
+        column.visible(!column.visible());
+        renderTenantColumnToggles();
+        queueTenantColumnPreferenceSave();
     });
 
     $(document).on('submit', 'form', function() {
