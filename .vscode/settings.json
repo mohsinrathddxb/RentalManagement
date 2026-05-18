@@ -19,6 +19,7 @@
         },
         "npm install": true,
         "pushd": true,
-        "popd": true
+        "popd": true,
+        "git add": true
     }
 }
