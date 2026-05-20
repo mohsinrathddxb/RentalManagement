@@ -151,4 +151,29 @@ function get_house_partition_counts($connection, $houseId) {
     ];
 }
 
+function get_house_occupancy_status($connection, $houseId, $fallbackStatus = 'Vacant') {
+    $counts = get_house_partition_counts($connection, $houseId);
+
+    if ($counts['total'] <= 0) {
+        return $fallbackStatus;
+    }
+
+    return $counts['available'] > 0 ? 'Vacant' : 'Occupied';
+}
+
+function sync_house_status_from_partitions($connection, $houseId, $fallbackStatus = 'Vacant') {
+    $houseId = (int) $houseId;
+    if ($houseId <= 0) {
+        return false;
+    }
+
+    $status = get_house_occupancy_status($connection, $houseId, $fallbackStatus);
+    $safeStatus = mysqli_real_escape_string($connection, $status);
+
+    return (bool) mysqli_query(
+        $connection,
+        "UPDATE `houses` SET `house_status`='$safeStatus' WHERE `houseID`='$houseId'"
+    );
+}
+
 ?>

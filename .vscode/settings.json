@@ -20,6 +20,7 @@
         "npm install": true,
         "pushd": true,
         "popd": true,
-        "git add": true
+        "git add": true,
+        "git commit": true
     }
 }

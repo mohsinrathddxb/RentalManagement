@@ -25,6 +25,7 @@ $sql = "
         t.`agreement_file`,
         h.`house_name`,
         h.`houseID`,
+        t.`partition_id`,
         COALESCE(hp.`rent_amount`, h.`rent_amount`) AS `rent_amount`,
         hp.`partition_number`
     FROM `tenants` t
@@ -57,6 +58,7 @@ if ($result) {
             'agreement_file' => (string) $row['agreement_file'],
             'house_name' => (string) $row['house_name'],
             'houseID' => (int) $row['houseID'],
+            'partition_id' => (int) $row['partition_id'],
             'partition_number' => (string) $row['partition_number'],
             'rent_amount' => (float) $row['rent_amount'],
         ];
@@ -67,4 +69,3 @@ api_json([
     'ok' => true,
     'items' => $rows,
 ]);
-

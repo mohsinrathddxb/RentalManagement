@@ -9,35 +9,40 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $input = api_get_json_input();
-$email = isset($input['email']) ? trim((string) $input['email']) : '';
+$identifier = isset($input['email']) ? trim((string) $input['email']) : '';
+$identifier = $identifier !== '' ? $identifier : (isset($input['uname']) ? trim((string) $input['uname']) : '');
 $password = isset($input['password']) ? trim((string) $input['password']) : '';
 
-if ($email === '' || $password === '') {
+if ($identifier === '' || $password === '') {
     api_json([
         'ok' => false,
-        'message' => 'Email and password are required.',
+        'message' => 'Email or username and password are required.',
         'errors' => [
-            'email' => $email === '' ? 'Please enter an email address.' : '',
+            'email' => $identifier === '' ? 'Please enter an email address or username.' : '',
             'password' => $password === '' ? 'Please enter your password.' : '',
         ],
     ], 422);
 }
 
-$tenantEmail = mysqli_real_escape_string($connection, is_email($email));
+$isUsernameLogin = strpos($identifier, '@') === false;
+$loginValue = $isUsernameLogin ? strtolower(trim($identifier)) : is_email($identifier);
+$tenantEmail = mysqli_real_escape_string($connection, is_email($identifier));
 $tenantResult = mysqli_query($connection, "SELECT `tenantID`, `tenant_name`, `email`, `phone_number` FROM `tenants` WHERE `email`='$tenantEmail' AND `tenant_status`='Active' ORDER BY `tenantID` DESC LIMIT 1");
 if ($tenantResult && mysqli_num_rows($tenantResult) === 1) {
     $tenantRow = mysqli_fetch_assoc($tenantResult);
     ensure_tenant_user_account($connection, (int) $tenantRow['tenantID'], $tenantRow['tenant_name'], $tenantRow['email'], $tenantRow['phone_number']);
 }
 
-$sql = "SELECT id, name, role, email, password, tenant_id FROM admin WHERE email = ?";
+$sql = $isUsernameLogin
+    ? "SELECT id, name, role, email, password, tenant_id FROM admin WHERE LOWER(SUBSTRING_INDEX(email, '@', 1)) = ? LIMIT 1"
+    : "SELECT id, name, role, email, password, tenant_id FROM admin WHERE email = ? LIMIT 1";
 $stmt = mysqli_prepare($connection, $sql);
 
 if (!$stmt) {
     api_json(['ok' => false, 'message' => 'Unable to prepare login request.'], 500);
 }
 
-mysqli_stmt_bind_param($stmt, 's', $email);
+mysqli_stmt_bind_param($stmt, 's', $loginValue);
 mysqli_stmt_execute($stmt);
 mysqli_stmt_store_result($stmt);
 
@@ -101,4 +106,3 @@ api_json([
         ] : null,
     ],
 ]);
-

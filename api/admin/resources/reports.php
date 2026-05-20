@@ -14,8 +14,9 @@ $selectedQuarter = isset($_GET['quarter']) ? (int) $_GET['quarter'] : (int) ceil
 
 $monthlySnapshot = get_monthly_report_snapshot($connection, $selectedMonth);
 $quarterlySnapshot = get_quarterly_report_snapshot($connection, $selectedYear, $selectedQuarter);
-$roomReport = get_room_wise_report($connection, $monthlySnapshot['start'], $monthlySnapshot['end']);
+$houseReport = get_house_wise_report($connection, $monthlySnapshot['start'], $monthlySnapshot['end']);
 $partitionReport = get_partition_wise_report($connection, $monthlySnapshot['start'], $monthlySnapshot['end']);
+$tenantCollectionReport = get_tenant_wise_collection_report($connection, $monthlySnapshot['start'], $monthlySnapshot['end']);
 
 $safeMonthStart = mysqli_real_escape_string($connection, $monthlySnapshot['start']);
 $safeMonthEnd = mysqli_real_escape_string($connection, $monthlySnapshot['end']);
@@ -45,6 +46,7 @@ api_json([
     'monthly' => $monthlySnapshot,
     'quarterly' => $quarterlySnapshot,
     'expenseBreakdown' => $breakdown,
-    'roomReport' => array_values($roomReport),
+    'houseReport' => array_values($houseReport),
     'partitionReport' => array_values($partitionReport),
+    'tenantCollectionReport' => array_values($tenantCollectionReport),
 ]);

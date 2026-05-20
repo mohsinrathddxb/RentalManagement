@@ -18,6 +18,16 @@ $sms_apiKey = "YourAPIKey";
 $sms_partnerID = "YourPartinerID";
 $sms_shortcode = "TextSMS";
 
+// SMTP configuration for transactional email such as OTP delivery.
+// Replace these placeholder values with your real mail server settings.
+$app_mail_from = 'rentalmanagementadmin@gmail.com';
+$app_mail_from_name = 'Co-Living Space Reset Password';
+$smtp_host = 'smtp.gmail.com';
+$smtp_port = 587;
+$smtp_username = 'rentalmanagementadmin@gmail.com';
+$smtp_password = 'jnmc gvnt bywh fshh';
+$smtp_secure = 'tls'; // tls, ssl, or empty string for no encryption
+
 // Telegram bot configuration
 $telegram_bot_token = "8712334063:AAGwk3uU-9i4cmO4Xx7zGDAsXZ7B8bN6FIk";
 

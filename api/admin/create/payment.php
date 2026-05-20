@@ -17,19 +17,16 @@ ensure_invoice_pdf_columns($connection);
 $input = api_get_json_input();
 $tenantId = isset($input['tenID']) ? (int) $input['tenID'] : 0;
 $invoiceNumber = isset($input['invoiceNumber']) ? uncrack((string) $input['invoiceNumber']) : '';
-$amountExpectedCents = isset($input['amountDue']) ? money_to_cents((string) $input['amountDue']) : 0;
 $amountPaidCents = isset($input['paidAmount']) ? money_to_cents((string) $input['paidAmount']) : 0;
 $mpesaCode = isset($input['mpesa']) ? uncrack((string) $input['mpesa']) : '';
 $comment = isset($input['comment']) ? uncrack((string) $input['comment']) : '';
 
-if ($tenantId <= 0 || $invoiceNumber === '' || $amountExpectedCents < 0 || $amountPaidCents < 0) {
+if ($tenantId <= 0 || $invoiceNumber === '' || $amountPaidCents <= 0) {
     api_json(['ok' => false, 'message' => 'Please select an invoice first so tenant and amount details can load.'], 422);
 }
 
 $paymentDate = date('Y-m-d');
 $timesnap = date('Y-m-d : H:i:s');
-$rawBalanceCents = $amountExpectedCents - $amountPaidCents;
-$balanceCents = max(0, $rawBalanceCents);
 
 $tenquer = mysqli_query($conn, "SELECT `account`, `tenant_name`, `phone_number` FROM `tenants` WHERE `tenantID`='$tenantId' LIMIT 1");
 $rec = $tenquer ? mysqli_fetch_array($tenquer, MYSQLI_BOTH) : null;
@@ -37,26 +34,61 @@ if (!$rec) {
     api_json(['ok' => false, 'message' => 'Tenant could not be found.'], 404);
 }
 
+$safeInvoiceNumber = mysqli_real_escape_string($connection, $invoiceNumber);
+$invoiceQuery = mysqli_query($conn, "
+    SELECT
+        `invoiceNumber`,
+        `tenantID`,
+        `amountDue`,
+        `rent_amount`,
+        `booking_amount`,
+        `deposit_amount`,
+        `credit_applied`,
+        `total_amount`,
+        `status`
+    FROM `invoices`
+    WHERE `invoiceNumber`='$safeInvoiceNumber'
+      AND `tenantID`='$tenantId'
+    LIMIT 1
+");
+$invoiceRow = $invoiceQuery ? mysqli_fetch_assoc($invoiceQuery) : null;
+if (!$invoiceRow) {
+    api_json(['ok' => false, 'message' => 'Invoice could not be found for this tenant.'], 404);
+}
+
+$previousPaymentsQuery = mysqli_query($conn, "
+    SELECT COALESCE(SUM(CAST(`amountPaid` AS DECIMAL(10,2))), 0) AS total
+    FROM `payments`
+    WHERE `invoiceNumber`='$safeInvoiceNumber'
+");
+$previousPaymentsRow = $previousPaymentsQuery ? mysqli_fetch_assoc($previousPaymentsQuery) : ['total' => 0];
+$previousPaymentsCents = max(0, money_to_cents((string) $previousPaymentsRow['total']));
+$beforeFinancials = summarize_invoice_financials($invoiceRow, $previousPaymentsCents);
+$afterFinancials = summarize_invoice_financials($invoiceRow, $previousPaymentsCents + $amountPaidCents);
+$paymentAllocation = summarize_payment_allocation([
+    'rent_amount' => $invoiceRow['rent_amount'],
+    'booking_amount' => $invoiceRow['booking_amount'],
+    'deposit_amount' => $invoiceRow['deposit_amount'],
+    'credit_applied' => $invoiceRow['credit_applied'],
+    'total_amount' => $invoiceRow['total_amount'],
+    'amountPaid' => cents_to_money($amountPaidCents),
+    'paid_before' => cents_to_money($previousPaymentsCents),
+    'paid_through_this_receipt' => cents_to_money($previousPaymentsCents + $amountPaidCents),
+]);
+
 $accountCents = isset($rec['account']) ? money_to_cents($rec['account']) : 0;
 $tenantName = $rec['tenant_name'];
 $firstName = strpos($tenantName, " ") !== false ? substr($tenantName, 0, strpos($tenantName, " ")) : $tenantName;
 $phone = $rec['phone_number'];
-
-if ($balanceCents === 0) {
-    $status = 'paid';
-    if ($rawBalanceCents < 0) {
-        $accountCents += abs($rawBalanceCents);
-    }
-} else {
-    $status = 'partial paid';
-    $accountCents += $amountPaidCents;
-}
+$status = (string) $afterFinancials['status'];
+$balanceCents = (int) $afterFinancials['remaining_due_cents'];
+$amountExpectedCents = (int) $beforeFinancials['remaining_due_cents'];
+$accountCents += (int) $paymentAllocation['advance_created_cents'];
 
 $amountExpected = cents_to_money($amountExpectedCents);
 $amountPaid = cents_to_money($amountPaidCents);
 $balance = cents_to_money($balanceCents);
 $accountBalance = cents_to_money($accountCents);
-$safeInvoiceNumber = mysqli_real_escape_string($connection, $invoiceNumber);
 $safeMpesaCode = mysqli_real_escape_string($connection, $mpesaCode);
 $safeComment = mysqli_real_escape_string($connection, $comment);
 $safeTenantName = mysqli_real_escape_string($connection, $tenantName);
@@ -68,9 +100,12 @@ $sqlTransactions = "INSERT INTO `transactions` (`actor`, `time`, `description`) 
 
 $noticeMessage = 'A payment of AED ' . format_money_amount($amountPaid) . ' was received for invoice ' . $invoiceNumber . '.';
 if ($balanceCents > 0) {
-    $noticeMessage .= ' Remaining amount to pay is AED ' . format_money_amount($balance) . '.';
+    $noticeMessage .= ' Remaining rent due is AED ' . format_money_amount($afterFinancials['rent_due']) . ', remaining deposit due is AED ' . format_money_amount($afterFinancials['deposit_due']) . ', and total remaining balance is AED ' . format_money_amount($balance) . '.';
 } else {
     $noticeMessage .= ' This invoice is now fully paid.';
+}
+if ((float) $paymentAllocation['advance_created'] > 0) {
+    $noticeMessage .= ' Extra payment of AED ' . format_money_amount($paymentAllocation['advance_created']) . ' was added to the tenant advance balance.';
 }
 
 $mysqli->autocommit(false);
@@ -100,11 +135,14 @@ if (!$state) {
 }
 
 $mysqli->commit();
-$finalMessage = "Greetings " . $firstName . ", This is a confirmation that your rent payment of AED " . format_money_amount($amountPaid) . " has been received and updated.";
+$finalMessage = "Greetings " . $firstName . ", This is a confirmation that your payment of AED " . format_money_amount($amountPaid) . " has been received and updated.";
 if ($balanceCents > 0) {
-    $finalMessage .= " Remaining balance to pay is AED " . format_money_amount($balance) . ".";
+    $finalMessage .= " Remaining rent due is AED " . format_money_amount($afterFinancials['rent_due']) . ", remaining deposit due is AED " . format_money_amount($afterFinancials['deposit_due']) . ", and total remaining balance is AED " . format_money_amount($balance) . ".";
 } else {
     $finalMessage .= " Your invoice is now fully paid.";
+}
+if ((float) $paymentAllocation['advance_created'] > 0) {
+    $finalMessage .= " AED " . format_money_amount($paymentAllocation['advance_created']) . " has been added to your advance balance.";
 }
 $finalMessage .= " Thank you.";
 @sendSMS($phone, $finalMessage);

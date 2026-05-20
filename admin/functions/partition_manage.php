@@ -59,6 +59,8 @@ if (isset($_POST['addPartition'])) {
             }
         }
 
+        sync_house_status_from_partitions($connection, $houseId, 'Vacant');
+
         redirect_partition('partition_added=1');
     }
 
@@ -80,6 +82,16 @@ if (isset($_POST['editPartition'])) {
     $allowedStatuses = ['Vacant', 'Occupied'];
     $status = in_array($status, $allowedStatuses, true) ? $status : 'Vacant';
 
+    $houseLookup = mysqli_prepare($connection, "SELECT `house_id` FROM `house_partitions` WHERE `partition_id` = ?");
+    $houseId = 0;
+    if ($houseLookup) {
+        mysqli_stmt_bind_param($houseLookup, 'i', $partitionId);
+        mysqli_stmt_execute($houseLookup);
+        mysqli_stmt_bind_result($houseLookup, $houseId);
+        mysqli_stmt_fetch($houseLookup);
+        mysqli_stmt_close($houseLookup);
+    }
+
     $statement = mysqli_prepare($connection, "
         UPDATE `house_partitions`
         SET `partition_number` = ?, `rent_amount` = ?, `partition_status` = ?, `description` = ?, `facilities` = ?
@@ -88,6 +100,9 @@ if (isset($_POST['editPartition'])) {
     mysqli_stmt_bind_param($statement, 'sdsssi', $partitionNumber, $rentAmount, $status, $description, $facilities, $partitionId);
 
     if (mysqli_stmt_execute($statement)) {
+        if ($houseId > 0) {
+            sync_house_status_from_partitions($connection, $houseId, 'Vacant');
+        }
         redirect_partition('partition_updated=1');
     }
 
@@ -99,6 +114,16 @@ if (isset($_POST['deletePartition'])) {
 
     if (!$partitionId) {
         redirect_partition('partition_error=delete');
+    }
+
+    $houseLookup = mysqli_prepare($connection, "SELECT `house_id` FROM `house_partitions` WHERE `partition_id` = ?");
+    $houseId = 0;
+    if ($houseLookup) {
+        mysqli_stmt_bind_param($houseLookup, 'i', $partitionId);
+        mysqli_stmt_execute($houseLookup);
+        mysqli_stmt_bind_result($houseLookup, $houseId);
+        mysqli_stmt_fetch($houseLookup);
+        mysqli_stmt_close($houseLookup);
     }
 
     $photos = mysqli_prepare($connection, "SELECT `pic_name` FROM `house_pics` WHERE `partition_id` = ?");
@@ -121,6 +146,9 @@ if (isset($_POST['deletePartition'])) {
     mysqli_stmt_bind_param($statement, 'i', $partitionId);
 
     if (mysqli_stmt_execute($statement)) {
+        if ($houseId > 0) {
+            sync_house_status_from_partitions($connection, $houseId, 'Vacant');
+        }
         redirect_partition('partition_deleted=1');
     }
 

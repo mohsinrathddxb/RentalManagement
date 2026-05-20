@@ -42,11 +42,17 @@ function expense_attachment_public_path($storedPath) {
     }
 
     $normalized = str_replace('\\', '/', $storedPath);
-    if (strpos($normalized, 'uploads/expense_attachments/') === 0) {
-        return $normalized;
+    $normalized = ltrim($normalized, '/');
+
+    if (strpos($normalized, 'admin/') === 0) {
+        return '/' . $normalized;
     }
 
-    return $normalized;
+    if (strpos($normalized, 'uploads/expense_attachments/') === 0) {
+        return '/admin/' . $normalized;
+    }
+
+    return '/' . $normalized;
 }
 
 function expense_is_image_kind($attachmentKind) {
@@ -251,33 +257,54 @@ function get_quarterly_report_snapshot($connection, $year, $quarter) {
     ];
 }
 
-function get_room_wise_report($connection, $dateFrom, $dateTo) {
+function get_house_wise_report($connection, $dateFrom, $dateTo) {
     $dateFrom = mysqli_real_escape_string($connection, $dateFrom);
     $dateTo = mysqli_real_escape_string($connection, $dateTo);
 
     $sql = "
         SELECT
-            t.`tenantID`,
-            t.`tenant_name`,
+            h.`houseID`,
             h.`house_name`,
-            hp.`partition_id`,
-            hp.`partition_number`,
             COALESCE(SUM(CAST(p.`amountPaid` AS DECIMAL(10,2))), 0) AS `rent_collected`,
+            COALESCE(SUM(
+                CASE
+                    WHEN CAST(t.`account` AS DECIMAL(10,2)) > 0 THEN CAST(t.`account` AS DECIMAL(10,2))
+                    ELSE 0
+                END
+            ), 0) AS `advance_amount`,
+            COALESCE((
+                SELECT SUM(
+                    CASE
+                        WHEN CAST(i.`amountDue` AS DECIMAL(10,2)) > 0 THEN CAST(i.`amountDue` AS DECIMAL(10,2))
+                        ELSE 0
+                    END
+                )
+                FROM `invoices` i
+                INNER JOIN `tenants` it ON i.`tenantID` = it.`tenantID`
+                WHERE it.`houseNumber` = h.`houseID`
+                  AND it.`tenant_status` = 'Active'
+            ), 0) AS `current_due_amount`,
+            COALESCE((
+                SELECT COUNT(*)
+                FROM `invoices` i2
+                INNER JOIN `tenants` it2 ON i2.`tenantID` = it2.`tenantID`
+                WHERE it2.`houseNumber` = h.`houseID`
+                  AND it2.`tenant_status` = 'Active'
+            ), 0) AS `invoice_count`,
             (
                 SELECT COALESCE(SUM(e.`amount`), 0)
                 FROM `expenses` e
-                WHERE e.`partition_id` = hp.`partition_id`
+                WHERE e.`house_id` = h.`houseID`
                   AND e.`expense_date` BETWEEN '$dateFrom' AND '$dateTo'
             ) AS `direct_expenses`
-        FROM `tenants` t
-        LEFT JOIN `houses` h ON t.`houseNumber` = h.`houseID`
-        LEFT JOIN `house_partitions` hp ON t.`partition_id` = hp.`partition_id`
+        FROM `houses` h
+        LEFT JOIN `tenants` t ON t.`houseNumber` = h.`houseID` AND t.`tenant_status` = 'Active'
         LEFT JOIN `payments` p
             ON p.`tenantID` = t.`tenantID`
            AND p.`dateofPayment` BETWEEN '$dateFrom' AND '$dateTo'
-        GROUP BY t.`tenantID`, t.`tenant_name`, h.`house_name`, hp.`partition_id`, hp.`partition_number`
+        GROUP BY h.`houseID`, h.`house_name`
         HAVING `rent_collected` > 0 OR `direct_expenses` > 0
-        ORDER BY h.`house_name` ASC, hp.`partition_number` ASC, t.`tenant_name` ASC
+        ORDER BY h.`house_name` ASC, h.`houseID` ASC
     ";
 
     $result = mysqli_query($connection, $sql);
@@ -285,10 +312,36 @@ function get_room_wise_report($connection, $dateFrom, $dateTo) {
 
     if ($result) {
         while ($row = mysqli_fetch_assoc($result)) {
-            $row['rent_collected'] = (float) $row['rent_collected'];
-            $row['direct_expenses'] = (float) $row['direct_expenses'];
-            $row['net_earning'] = $row['rent_collected'] - $row['direct_expenses'];
-            $rows[] = $row;
+            $rentCollected = (float) $row['rent_collected'];
+            $directExpenses = (float) $row['direct_expenses'];
+            $currentDueAmount = (float) $row['current_due_amount'];
+            $advanceAmount = (float) $row['advance_amount'];
+            $invoiceCount = (int) $row['invoice_count'];
+            $statusLabel = 'Up to Date';
+            $statusAmount = 0.0;
+
+            if ($currentDueAmount > 0) {
+                $statusLabel = 'Due';
+                $statusAmount = $currentDueAmount;
+            } elseif ($advanceAmount > 0) {
+                $statusLabel = 'Advance';
+                $statusAmount = $advanceAmount;
+            } elseif ($invoiceCount > 0) {
+                $statusLabel = 'Fully Paid';
+            }
+
+            $rows[] = [
+                'houseID' => (int) $row['houseID'],
+                'house_name' => isset($row['house_name']) ? (string) $row['house_name'] : '',
+                'rent_collected' => $rentCollected,
+                'direct_expenses' => $directExpenses,
+                'net_earning' => $rentCollected - $directExpenses,
+                'current_due_amount' => $currentDueAmount,
+                'advance_amount' => $advanceAmount,
+                'invoice_count' => $invoiceCount,
+                'payment_status_label' => $statusLabel,
+                'payment_status_amount' => $statusAmount,
+            ];
         }
     }
 
@@ -332,6 +385,93 @@ function get_partition_wise_report($connection, $dateFrom, $dateTo) {
             $row['direct_expenses'] = (float) $row['direct_expenses'];
             $row['net_earning'] = $row['rent_collected'] - $row['direct_expenses'];
             $rows[] = $row;
+        }
+    }
+
+    return $rows;
+}
+
+function get_tenant_wise_collection_report($connection, $dateFrom, $dateTo) {
+    $dateFrom = mysqli_real_escape_string($connection, $dateFrom);
+    $dateTo = mysqli_real_escape_string($connection, $dateTo);
+
+    $sql = "
+        SELECT
+            t.`tenantID`,
+            t.`tenant_name`,
+            t.`email`,
+            t.`account`,
+            h.`house_name`,
+            hp.`partition_number`,
+            COALESCE(SUM(CAST(p.`amountPaid` AS DECIMAL(10,2))), 0) AS `rent_collected`,
+            COUNT(DISTINCT p.`paymentID`) AS `payment_count`,
+            COALESCE((
+                SELECT SUM(
+                    CASE
+                        WHEN CAST(i2.`amountDue` AS DECIMAL(10,2)) > 0 THEN CAST(i2.`amountDue` AS DECIMAL(10,2))
+                        ELSE 0
+                    END
+                )
+                FROM `invoices` i2
+                WHERE i2.`tenantID` = t.`tenantID`
+            ), 0) AS `current_due_amount`,
+            COALESCE((
+                SELECT COUNT(*)
+                FROM `invoices` i3
+                WHERE i3.`tenantID` = t.`tenantID`
+            ), 0) AS `invoice_count`
+        FROM `tenants` t
+        LEFT JOIN `houses` h ON t.`houseNumber` = h.`houseID`
+        LEFT JOIN `house_partitions` hp ON t.`partition_id` = hp.`partition_id`
+        LEFT JOIN `payments` p
+            ON p.`tenantID` = t.`tenantID`
+           AND p.`dateofPayment` BETWEEN '$dateFrom' AND '$dateTo'
+        WHERE t.`tenant_status` = 'Active'
+        GROUP BY
+            t.`tenantID`,
+            t.`tenant_name`,
+            t.`email`,
+            h.`house_name`,
+            hp.`partition_number`
+        HAVING `rent_collected` > 0 OR `payment_count` > 0
+        ORDER BY `rent_collected` DESC, t.`tenant_name` ASC, t.`tenantID` DESC
+    ";
+
+    $result = mysqli_query($connection, $sql);
+    $rows = [];
+
+    if ($result) {
+        while ($row = mysqli_fetch_assoc($result)) {
+            $currentDueAmount = (float) $row['current_due_amount'];
+            $advanceAmount = max(0, (float) $row['account']);
+            $invoiceCount = (int) $row['invoice_count'];
+            $statusLabel = 'Up to Date';
+            $statusAmount = 0.0;
+
+            if ($currentDueAmount > 0) {
+                $statusLabel = 'Due';
+                $statusAmount = $currentDueAmount;
+            } elseif ($advanceAmount > 0) {
+                $statusLabel = 'Advance';
+                $statusAmount = $advanceAmount;
+            } elseif ($invoiceCount > 0) {
+                $statusLabel = 'Fully Paid';
+            }
+
+            $rows[] = [
+                'tenantID' => (int) $row['tenantID'],
+                'tenant_name' => isset($row['tenant_name']) ? (string) $row['tenant_name'] : '',
+                'email' => isset($row['email']) ? (string) $row['email'] : '',
+                'house_name' => isset($row['house_name']) ? (string) $row['house_name'] : '',
+                'partition_number' => isset($row['partition_number']) ? (string) $row['partition_number'] : '',
+                'rent_collected' => (float) $row['rent_collected'],
+                'payment_count' => (int) $row['payment_count'],
+                'current_due_amount' => $currentDueAmount,
+                'advance_amount' => $advanceAmount,
+                'invoice_count' => $invoiceCount,
+                'payment_status_label' => $statusLabel,
+                'payment_status_amount' => $statusAmount,
+            ];
         }
     }
 

@@ -232,6 +232,240 @@ function ensure_invoice_pdf_columns($connection) {
     ");
 }
 
+function invoice_value_to_cents($value) {
+    if (function_exists('money_to_cents')) {
+        return money_to_cents((string) $value);
+    }
+
+    return (int) round(((float) $value) * 100);
+}
+
+function invoice_cents_to_float($value) {
+    return ((int) $value) / 100;
+}
+
+function invoice_base_components_from_row($invoiceRow) {
+    $rentCents = max(0, invoice_value_to_cents(isset($invoiceRow['rent_amount']) ? $invoiceRow['rent_amount'] : 0));
+    $depositCents = max(0, invoice_value_to_cents(isset($invoiceRow['deposit_amount']) ? $invoiceRow['deposit_amount'] : 0));
+    $bookingCents = max(0, invoice_value_to_cents(isset($invoiceRow['booking_amount']) ? $invoiceRow['booking_amount'] : 0));
+    $fallbackTotalCents = max(
+        0,
+        invoice_value_to_cents(isset($invoiceRow['total_amount']) ? $invoiceRow['total_amount'] : 0),
+        invoice_value_to_cents(isset($invoiceRow['amountDue']) ? $invoiceRow['amountDue'] : 0)
+    );
+
+    $components = [
+        [
+            'key' => 'deposit',
+            'label' => 'Deposit',
+            'total_cents' => $depositCents + $bookingCents,
+        ],
+        [
+            'key' => 'rent',
+            'label' => 'Monthly rent',
+            'total_cents' => $rentCents,
+        ],
+    ];
+
+    $knownTotalCents = $rentCents + $depositCents + $bookingCents;
+    if ($knownTotalCents <= 0 && $fallbackTotalCents > 0) {
+        $components[1]['total_cents'] = $fallbackTotalCents;
+        $knownTotalCents = $fallbackTotalCents;
+    } elseif ($fallbackTotalCents > $knownTotalCents) {
+        $components[1]['total_cents'] += $fallbackTotalCents - $knownTotalCents;
+        $knownTotalCents = $fallbackTotalCents;
+    }
+
+    return [$components, $knownTotalCents];
+}
+
+function invoice_allocate_amount(&$components, $amountCents, $bucketKey) {
+    $remaining = max(0, (int) $amountCents);
+
+    foreach ($components as &$component) {
+        $alreadyAllocated = isset($component[$bucketKey]) ? (int) $component[$bucketKey] : 0;
+        $capacity = max(0, (int) $component['total_cents'] - $alreadyAllocated);
+        $applied = min($capacity, $remaining);
+        $component[$bucketKey] = $alreadyAllocated + $applied;
+        $remaining -= $applied;
+
+        if ($remaining <= 0) {
+            break;
+        }
+    }
+    unset($component);
+
+    return $remaining;
+}
+
+function summarize_invoice_financials($invoiceRow, $cashPaidOverrideCents = null) {
+    list($components, $chargeTotalCents) = invoice_base_components_from_row($invoiceRow);
+
+    foreach ($components as &$component) {
+        $component['credit_applied_cents'] = 0;
+        $component['cash_paid_cents'] = 0;
+    }
+    unset($component);
+
+    $creditAppliedCents = min(
+        $chargeTotalCents,
+        max(0, invoice_value_to_cents(isset($invoiceRow['credit_applied']) ? $invoiceRow['credit_applied'] : 0))
+    );
+    $rawCashPaidCents = $cashPaidOverrideCents === null
+        ? max(0, invoice_value_to_cents(isset($invoiceRow['total_paid']) ? $invoiceRow['total_paid'] : 0))
+        : max(0, (int) $cashPaidOverrideCents);
+    $cashApplicableCents = min(max(0, $chargeTotalCents - $creditAppliedCents), $rawCashPaidCents);
+    $extraAdvanceCents = max(0, $rawCashPaidCents - $cashApplicableCents);
+
+    invoice_allocate_amount($components, $creditAppliedCents, 'credit_applied_cents');
+
+    foreach ($components as &$component) {
+        $component['remaining_after_credit_cents'] = max(0, (int) $component['total_cents'] - (int) $component['credit_applied_cents']);
+    }
+    unset($component);
+
+    $remainingCashToAllocate = $cashApplicableCents;
+    foreach ($components as &$component) {
+        $cashApplied = min((int) $component['remaining_after_credit_cents'], $remainingCashToAllocate);
+        $component['cash_paid_cents'] = $cashApplied;
+        $component['remaining_due_cents'] = max(0, (int) $component['remaining_after_credit_cents'] - $cashApplied);
+        $remainingCashToAllocate -= $cashApplied;
+    }
+    unset($component);
+
+    $remainingDueCents = 0;
+    $rentDueCents = 0;
+    $depositDueCents = 0;
+    $rentPaidCents = 0;
+    $depositPaidCents = 0;
+    $rentCreditCents = 0;
+    $depositCreditCents = 0;
+    $displayComponents = [];
+
+    foreach ($components as $component) {
+        if ((int) $component['total_cents'] <= 0) {
+            continue;
+        }
+
+        $remainingDueCents += (int) $component['remaining_due_cents'];
+        $paidCents = (int) $component['credit_applied_cents'] + (int) $component['cash_paid_cents'];
+        $displayComponents[] = [
+            'key' => $component['key'],
+            'label' => $component['label'],
+            'total' => invoice_cents_to_float($component['total_cents']),
+            'credit_applied' => invoice_cents_to_float($component['credit_applied_cents']),
+            'cash_paid' => invoice_cents_to_float($component['cash_paid_cents']),
+            'paid_total' => invoice_cents_to_float($paidCents),
+            'remaining_due' => invoice_cents_to_float($component['remaining_due_cents']),
+        ];
+
+        if ($component['key'] === 'rent') {
+            $rentDueCents = (int) $component['remaining_due_cents'];
+            $rentPaidCents = (int) $component['cash_paid_cents'];
+            $rentCreditCents = (int) $component['credit_applied_cents'];
+        } elseif ($component['key'] === 'deposit') {
+            $depositDueCents = (int) $component['remaining_due_cents'];
+            $depositPaidCents = (int) $component['cash_paid_cents'];
+            $depositCreditCents = (int) $component['credit_applied_cents'];
+        }
+    }
+
+    $settledCents = min($chargeTotalCents, $creditAppliedCents + $cashApplicableCents);
+    $status = 'unpaid';
+    if ($remainingDueCents <= 0 && $chargeTotalCents > 0) {
+        $status = 'paid';
+    } elseif ($settledCents > 0) {
+        $status = 'partial paid';
+    }
+
+    return [
+        'components' => $displayComponents,
+        'charge_total' => invoice_cents_to_float($chargeTotalCents),
+        'charge_total_cents' => $chargeTotalCents,
+        'credit_applied' => invoice_cents_to_float($creditAppliedCents),
+        'credit_applied_cents' => $creditAppliedCents,
+        'cash_paid' => invoice_cents_to_float($cashApplicableCents),
+        'cash_paid_cents' => $cashApplicableCents,
+        'remaining_due' => invoice_cents_to_float($remainingDueCents),
+        'remaining_due_cents' => $remainingDueCents,
+        'extra_advance' => invoice_cents_to_float($extraAdvanceCents),
+        'extra_advance_cents' => $extraAdvanceCents,
+        'status' => $status,
+        'rent_due' => invoice_cents_to_float($rentDueCents),
+        'rent_due_cents' => $rentDueCents,
+        'deposit_due' => invoice_cents_to_float($depositDueCents),
+        'deposit_due_cents' => $depositDueCents,
+        'rent_paid' => invoice_cents_to_float($rentPaidCents),
+        'rent_paid_cents' => $rentPaidCents,
+        'deposit_paid' => invoice_cents_to_float($depositPaidCents),
+        'deposit_paid_cents' => $depositPaidCents,
+        'rent_credit' => invoice_cents_to_float($rentCreditCents),
+        'rent_credit_cents' => $rentCreditCents,
+        'deposit_credit' => invoice_cents_to_float($depositCreditCents),
+        'deposit_credit_cents' => $depositCreditCents,
+        'booking_due' => 0.0,
+        'booking_due_cents' => 0,
+        'booking_paid' => 0.0,
+        'booking_paid_cents' => 0,
+        'booking_credit' => 0.0,
+        'booking_credit_cents' => 0,
+    ];
+}
+
+function summarize_payment_allocation($paymentRow) {
+    $paidBeforeCents = max(0, invoice_value_to_cents(isset($paymentRow['paid_before']) ? $paymentRow['paid_before'] : 0));
+    $paidThroughCents = max(0, invoice_value_to_cents(isset($paymentRow['paid_through_this_receipt']) ? $paymentRow['paid_through_this_receipt'] : 0));
+    $paymentCents = max(0, invoice_value_to_cents(isset($paymentRow['amountPaid']) ? $paymentRow['amountPaid'] : 0));
+
+    $before = summarize_invoice_financials($paymentRow, $paidBeforeCents);
+    $after = summarize_invoice_financials($paymentRow, $paidThroughCents);
+
+    $componentMap = [];
+    foreach ($before['components'] as $component) {
+        $componentMap[$component['key']]['before'] = $component;
+    }
+    foreach ($after['components'] as $component) {
+        $componentMap[$component['key']]['after'] = $component;
+    }
+
+    $receiptItems = [];
+    foreach ($componentMap as $key => $componentState) {
+        $beforeCash = isset($componentState['before']) ? invoice_value_to_cents($componentState['before']['cash_paid']) : 0;
+        $afterCash = isset($componentState['after']) ? invoice_value_to_cents($componentState['after']['cash_paid']) : 0;
+        $appliedThisReceiptCents = max(0, $afterCash - $beforeCash);
+        if ($appliedThisReceiptCents <= 0) {
+            continue;
+        }
+
+        $label = isset($componentState['after']['label'])
+            ? $componentState['after']['label']
+            : (isset($componentState['before']['label']) ? $componentState['before']['label'] : ucwords((string) $key));
+        $receiptItems[] = [
+            'key' => $key,
+            'label' => $label,
+            'amount' => invoice_cents_to_float($appliedThisReceiptCents),
+            'amount_cents' => $appliedThisReceiptCents,
+        ];
+    }
+
+    $appliedToInvoiceCents = 0;
+    foreach ($receiptItems as $receiptItem) {
+        $appliedToInvoiceCents += (int) $receiptItem['amount_cents'];
+    }
+
+    $advanceCreatedCents = max(0, $paymentCents - $appliedToInvoiceCents);
+
+    return [
+        'before' => $before,
+        'after' => $after,
+        'receipt_items' => $receiptItems,
+        'applied_to_invoice' => invoice_cents_to_float($appliedToInvoiceCents),
+        'applied_to_invoice_cents' => $appliedToInvoiceCents,
+        'advance_created' => invoice_cents_to_float($advanceCreatedCents),
+        'advance_created_cents' => $advanceCreatedCents,
+    ];
+}
+
 function pdf_mobile_token_secret() {
     global $telegram_bot_token, $database;
 
@@ -266,31 +500,33 @@ function pdf_mobile_token_is_valid($email, $type, $documentId, $token) {
 
 function get_invoice_line_items($invoiceRow) {
     $lineItems = [];
+    $financials = summarize_invoice_financials($invoiceRow);
 
-    $rentAmount = isset($invoiceRow['rent_amount']) ? (float) $invoiceRow['rent_amount'] : 0;
-    $bookingAmount = isset($invoiceRow['booking_amount']) ? (float) $invoiceRow['booking_amount'] : 0;
-    $depositAmount = isset($invoiceRow['deposit_amount']) ? (float) $invoiceRow['deposit_amount'] : 0;
-    $creditApplied = isset($invoiceRow['credit_applied']) ? (float) $invoiceRow['credit_applied'] : 0;
-    $fallbackTotal = isset($invoiceRow['total_amount']) ? (float) $invoiceRow['total_amount'] : (float) $invoiceRow['amountDue'];
-
-    if ($rentAmount > 0) {
-        $lineItems[] = ['description' => 'Monthly rent', 'quantity' => 1, 'unit_price' => $rentAmount, 'amount' => $rentAmount];
-    }
-
-    if ($bookingAmount > 0) {
-        $lineItems[] = ['description' => 'Booking amount', 'quantity' => 1, 'unit_price' => $bookingAmount, 'amount' => $bookingAmount];
-    }
-
-    if ($depositAmount > 0) {
-        $lineItems[] = ['description' => 'Security deposit', 'quantity' => 1, 'unit_price' => $depositAmount, 'amount' => $depositAmount];
+    foreach ($financials['components'] as $component) {
+        $lineItems[] = [
+            'description' => $component['label'],
+            'quantity' => 1,
+            'unit_price' => $component['total'],
+            'amount' => $component['total'],
+        ];
     }
 
     if (empty($lineItems)) {
-        $lineItems[] = ['description' => 'Rental charges', 'quantity' => 1, 'unit_price' => $fallbackTotal, 'amount' => $fallbackTotal];
+        $lineItems[] = [
+            'description' => 'Rental charges',
+            'quantity' => 1,
+            'unit_price' => $financials['charge_total'],
+            'amount' => $financials['charge_total'],
+        ];
     }
 
-    if ($creditApplied > 0) {
-        $lineItems[] = ['description' => 'Account credit applied', 'quantity' => 1, 'unit_price' => $creditApplied * -1, 'amount' => $creditApplied * -1];
+    if ($financials['credit_applied'] > 0) {
+        $lineItems[] = [
+            'description' => 'Advance credit applied',
+            'quantity' => 1,
+            'unit_price' => $financials['credit_applied'] * -1,
+            'amount' => $financials['credit_applied'] * -1,
+        ];
     }
 
     return $lineItems;
@@ -338,6 +574,7 @@ function build_invoice_document_data($connection, $invoiceNumber, $tenantId = 0)
     }
 
     $row = mysqli_fetch_assoc($query);
+    $row['financials'] = summarize_invoice_financials($row);
     $row['line_items'] = get_invoice_line_items($row);
     return $row;
 }
@@ -394,6 +631,8 @@ function build_payment_receipt_data($connection, $paymentId, $tenantId = 0) {
     }
 
     $row = mysqli_fetch_assoc($query);
+    $row['financials'] = summarize_invoice_financials($row, max(0, invoice_value_to_cents(isset($row['paid_through_this_receipt']) ? $row['paid_through_this_receipt'] : 0)));
+    $row['payment_allocation'] = summarize_payment_allocation($row);
     $row['line_items'] = get_invoice_line_items($row);
     return $row;
 }
@@ -523,10 +762,13 @@ function build_invoice_pdf_document($invoiceRow) {
     }
 
     $lineItems = $invoiceRow['line_items'];
-    $totalAmount = isset($invoiceRow['total_amount']) ? (float) $invoiceRow['total_amount'] : (float) $invoiceRow['amountDue'];
-    $amountDue = isset($invoiceRow['amountDue']) ? (float) $invoiceRow['amountDue'] : 0;
-    $totalPaid = isset($invoiceRow['total_paid']) ? (float) $invoiceRow['total_paid'] : 0;
-    $creditApplied = isset($invoiceRow['credit_applied']) ? (float) $invoiceRow['credit_applied'] : 0;
+    $financials = isset($invoiceRow['financials']) && is_array($invoiceRow['financials'])
+        ? $invoiceRow['financials']
+        : summarize_invoice_financials($invoiceRow);
+    $totalAmount = (float) $financials['charge_total'];
+    $amountDue = (float) $financials['remaining_due'];
+    $totalPaid = (float) $financials['cash_paid'];
+    $creditApplied = (float) $financials['credit_applied'];
 
     $pdf->text($left, $top, 'INVOICE', 24, 'bold', $brandBlue);
     pdf_draw_brand_logo($pdf, $logoBoxX, $logoBoxY, 0.32);
@@ -570,29 +812,31 @@ function build_invoice_pdf_document($invoiceRow) {
     $summaryX = 280;
     $summaryWidth = 214;
     $summaryValueX = $summaryX + 136;
-    $pdf->rect($summaryX, $summaryTop, $summaryWidth, 28, 'B', [220, 223, 228], $softGray, 0.8);
-    $pdf->text($summaryX + 10, $summaryTop + 18, 'TOTAL CHARGES', 10, 'bold');
-    $pdf->text($summaryValueX, $summaryTop + 18, pdf_money($totalAmount), 10, 'bold');
+    $summaryRows = [
+        ['label' => 'TOTAL CHARGES', 'value' => pdf_money($totalAmount), 'fill' => $softGray, 'textColor' => [0, 0, 0]],
+        ['label' => 'ADVANCE APPLIED', 'value' => pdf_money($creditApplied), 'fill' => [250, 250, 250], 'textColor' => [0, 0, 0]],
+        ['label' => 'CASH RECEIVED', 'value' => pdf_money($totalPaid), 'fill' => [250, 250, 250], 'textColor' => [0, 0, 0]],
+        ['label' => 'RENT REMAINING', 'value' => pdf_money($financials['rent_due']), 'fill' => [250, 250, 250], 'textColor' => [0, 0, 0]],
+        ['label' => 'DEPOSIT DUE', 'value' => pdf_money($financials['deposit_due']), 'fill' => [250, 250, 250], 'textColor' => [0, 0, 0]],
+    ];
 
-    $pdf->rect($summaryX, $summaryTop + 28, $summaryWidth, 28, 'B', [220, 223, 228], [250, 250, 250], 0.8);
-    $pdf->text($summaryX + 10, $summaryTop + 46, 'PAID TO DATE', 10, 'bold');
-    $pdf->text($summaryValueX, $summaryTop + 46, pdf_money($totalPaid), 10, 'bold');
-
-    if ($creditApplied > 0) {
-        $pdf->rect($summaryX, $summaryTop + 56, $summaryWidth, 28, 'B', [220, 223, 228], [250, 250, 250], 0.8);
-        $pdf->text($summaryX + 10, $summaryTop + 74, 'CREDIT APPLIED', 10, 'bold');
-        $pdf->text($summaryValueX, $summaryTop + 74, pdf_money($creditApplied), 10, 'bold');
-        $summaryFooterTop = $summaryTop + 84;
-    } else {
-        $summaryFooterTop = $summaryTop + 56;
+    $summaryOffset = 0;
+    foreach ($summaryRows as $summaryRow) {
+        $blockY = $summaryTop + $summaryOffset;
+        $pdf->rect($summaryX, $blockY, $summaryWidth, 28, 'B', [220, 223, 228], $summaryRow['fill'], 0.8);
+        $pdf->text($summaryX + 10, $blockY + 18, $summaryRow['label'], 10, 'bold', $summaryRow['textColor']);
+        $pdf->text($summaryValueX, $blockY + 18, $summaryRow['value'], 10, 'bold', $summaryRow['textColor']);
+        $summaryOffset += 28;
     }
+
+    $summaryFooterTop = $summaryTop + $summaryOffset;
 
     $pdf->rect($summaryX, $summaryFooterTop, $summaryWidth, 34, 'B', $brandBlue, $brandBlue, 0.8);
     $pdf->text($summaryX + 10, $summaryFooterTop + 22, 'TOTAL DUE', 11, 'bold', [255, 255, 255]);
     $pdf->text($summaryValueX, $summaryFooterTop + 22, pdf_money($amountDue), 11, 'bold', [255, 255, 255]);
 
     $footerTop = $summaryFooterTop + 72;
-    $pdf->text($left, $footerTop, 'Invoice status: ' . ucwords((string) $invoiceRow['status']), 10, 'bold', $darkGray);
+    $pdf->text($left, $footerTop, 'Invoice status: ' . ucwords((string) $financials['status']), 10, 'bold', $darkGray);
 
     $commentLines = pdf_wrap_text(isset($invoiceRow['comment']) ? $invoiceRow['comment'] : '', 80);
     if (!empty($commentLines)) {
@@ -645,12 +889,39 @@ function build_payment_receipt_pdf_document($paymentRow) {
         $tenantAddressLines[] = $paymentRow['phone_number'];
     }
 
-    $lineItems = $paymentRow['line_items'];
+    $paymentAllocation = isset($paymentRow['payment_allocation']) && is_array($paymentRow['payment_allocation'])
+        ? $paymentRow['payment_allocation']
+        : summarize_payment_allocation($paymentRow);
+    $lineItems = [];
+    foreach ($paymentAllocation['receipt_items'] as $receiptItem) {
+        $lineItems[] = [
+            'description' => $receiptItem['label'],
+            'quantity' => 1,
+            'unit_price' => $receiptItem['amount'],
+            'amount' => $receiptItem['amount'],
+        ];
+    }
+    if ((float) $paymentAllocation['advance_created'] > 0) {
+        $lineItems[] = [
+            'description' => 'Added to tenant advance',
+            'quantity' => 1,
+            'unit_price' => $paymentAllocation['advance_created'],
+            'amount' => $paymentAllocation['advance_created'],
+        ];
+    }
+    if (empty($lineItems)) {
+        $lineItems[] = [
+            'description' => 'Payment received',
+            'quantity' => 1,
+            'unit_price' => (float) $paymentRow['amountPaid'],
+            'amount' => (float) $paymentRow['amountPaid'],
+        ];
+    }
     $paymentAmount = (float) $paymentRow['amountPaid'];
-    $remainingBalance = (float) $paymentRow['balance'];
-    $invoiceTotal = isset($paymentRow['total_amount']) ? (float) $paymentRow['total_amount'] : (float) $paymentRow['expectedAmount'];
-    $paidBefore = isset($paymentRow['paid_before']) ? (float) $paymentRow['paid_before'] : 0;
-    $paidThrough = isset($paymentRow['paid_through_this_receipt']) ? (float) $paymentRow['paid_through_this_receipt'] : $paymentAmount;
+    $remainingBalance = (float) $paymentAllocation['after']['remaining_due'];
+    $invoiceTotal = (float) $paymentAllocation['after']['charge_total'];
+    $paidBefore = (float) $paymentAllocation['before']['cash_paid'];
+    $paidThrough = (float) $paymentAllocation['after']['cash_paid'];
 
     $pdf->text($left, $top, 'PAYMENT RECEIPT', 24, 'bold', $brandBlue);
     pdf_draw_brand_logo($pdf, $logoBoxX, $logoBoxY, 0.32);
@@ -696,11 +967,23 @@ function build_payment_receipt_pdf_document($paymentRow) {
     $summaryValueX = $summaryX + 148;
     $summaryRows = [
         ['label' => 'INVOICE TOTAL', 'value' => pdf_money($invoiceTotal), 'fill' => $softGray, 'textColor' => [0, 0, 0]],
+        ['label' => 'ADVANCE APPLIED', 'value' => pdf_money($paymentAllocation['after']['credit_applied']), 'fill' => [250, 250, 250], 'textColor' => [0, 0, 0]],
         ['label' => 'PAID BEFORE', 'value' => pdf_money($paidBefore), 'fill' => [250, 250, 250], 'textColor' => [0, 0, 0]],
         ['label' => 'THIS PAYMENT', 'value' => pdf_money($paymentAmount), 'fill' => [250, 250, 250], 'textColor' => [0, 0, 0]],
         ['label' => 'PAID TO DATE', 'value' => pdf_money($paidThrough), 'fill' => [250, 250, 250], 'textColor' => [0, 0, 0]],
+        ['label' => 'RENT REMAINING', 'value' => pdf_money($paymentAllocation['after']['rent_due']), 'fill' => [250, 250, 250], 'textColor' => [0, 0, 0]],
+        ['label' => 'DEPOSIT DUE', 'value' => pdf_money($paymentAllocation['after']['deposit_due']), 'fill' => [250, 250, 250], 'textColor' => [0, 0, 0]],
         ['label' => 'BALANCE DUE', 'value' => pdf_money($remainingBalance), 'fill' => $brandBlue, 'textColor' => [255, 255, 255]]
     ];
+
+    if ((float) $paymentAllocation['advance_created'] > 0) {
+        array_splice($summaryRows, count($summaryRows) - 1, 0, [[
+            'label' => 'NEW ADVANCE',
+            'value' => pdf_money($paymentAllocation['advance_created']),
+            'fill' => [250, 250, 250],
+            'textColor' => [0, 0, 0],
+        ]]);
+    }
 
     $rowIndex = 0;
     foreach ($summaryRows as $summaryRow) {
@@ -712,7 +995,7 @@ function build_payment_receipt_pdf_document($paymentRow) {
     }
 
     $footerTop = $summaryTop + ($rowIndex * 28) + 28;
-    $statusLine = 'Invoice status after payment: ' . ucwords((string) $paymentRow['invoice_status']);
+    $statusLine = 'Invoice status after payment: ' . ucwords((string) $paymentAllocation['after']['status']);
     $pdf->text($left, $footerTop, $statusLine, 10, 'bold', $darkGray);
 
     $commentLines = pdf_wrap_text(isset($paymentRow['comment']) ? $paymentRow['comment'] : '', 80);

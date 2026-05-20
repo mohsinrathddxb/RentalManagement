@@ -49,11 +49,20 @@ $items = [];
 if ($result) {
     while ($row = mysqli_fetch_assoc($result)) {
         $partitionId = (int) $row['partition_id'];
-        $photoCountResult = mysqli_query(
+        $photoUrls = [];
+        $photoResult = mysqli_query(
             $connection,
-            "SELECT COUNT(*) AS total FROM `house_pics` WHERE `partition_id` = '$partitionId'"
+            "SELECT `pic_name` FROM `house_pics` WHERE `partition_id` = '$partitionId' ORDER BY `pic_id` DESC"
         );
-        $photoCount = $photoCountResult ? (int) mysqli_fetch_assoc($photoCountResult)['total'] : 0;
+
+        if ($photoResult) {
+            while ($photo = mysqli_fetch_assoc($photoResult)) {
+                $photoUrl = house_photo_public_path(isset($photo['pic_name']) ? $photo['pic_name'] : '');
+                if ($photoUrl !== '') {
+                    $photoUrls[] = $photoUrl;
+                }
+            }
+        }
 
         $items[] = [
             'partition_id' => $partitionId,
@@ -65,7 +74,8 @@ if ($result) {
             'partition_status' => (string) $row['partition_status'],
             'description' => isset($row['description']) ? (string) $row['description'] : '',
             'facilities' => get_partition_facilities_array(isset($row['facilities']) ? $row['facilities'] : ''),
-            'photo_count' => $photoCount,
+            'photo_count' => count($photoUrls),
+            'photo_urls' => $photoUrls,
         ];
     }
 }

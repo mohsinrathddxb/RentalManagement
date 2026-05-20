@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../../admin/functions/db.php';
+require_once __DIR__ . '/../../admin/functions/auth_helpers.php';
 require_once __DIR__ . '/../../admin/functions/tenant_helpers.php';
 require_once __DIR__ . '/../../admin/functions/partition_helpers.php';
 
@@ -33,6 +34,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 
 ensure_tenant_schema($connection);
 ensure_partition_tables($connection);
+ensure_auth_tables($connection);
 
 function api_json($payload, int $statusCode = 200): void
 {
@@ -82,4 +84,3 @@ function api_require_admin(): array
 
     return $auth;
 }
-

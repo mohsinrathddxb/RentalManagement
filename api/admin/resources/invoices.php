@@ -16,11 +16,20 @@ if ($auth['isAdmin']) {
             t.`phone_number`,
             i.`tenantID`,
             i.`amountDue`,
+            i.`rent_amount`,
+            i.`booking_amount`,
+            i.`deposit_amount`,
+            i.`credit_applied`,
             i.`total_amount`,
             i.`dateOfInvoice`,
             i.`dateDue`,
             i.`status`,
             i.`comment`,
+            (
+                SELECT COALESCE(SUM(p.`amountPaid`), 0)
+                FROM `payments` p
+                WHERE p.`invoiceNumber` = i.`invoiceNumber`
+            ) AS `total_paid`,
             (
                 SELECT MAX(p.`paymentID`)
                 FROM `payments` p
@@ -40,11 +49,20 @@ if ($auth['isAdmin']) {
             t.`phone_number`,
             i.`tenantID`,
             i.`amountDue`,
+            i.`rent_amount`,
+            i.`booking_amount`,
+            i.`deposit_amount`,
+            i.`credit_applied`,
             i.`total_amount`,
             i.`dateOfInvoice`,
             i.`dateDue`,
             i.`status`,
             i.`comment`,
+            (
+                SELECT COALESCE(SUM(p.`amountPaid`), 0)
+                FROM `payments` p
+                WHERE p.`invoiceNumber` = i.`invoiceNumber`
+            ) AS `total_paid`,
             (
                 SELECT MAX(p.`paymentID`)
                 FROM `payments` p
@@ -65,6 +83,7 @@ if ($result) {
     while ($row = mysqli_fetch_assoc($result)) {
         $invoiceNumber = (string) $row['invoiceNumber'];
         $latestPaymentId = isset($row['latestPaymentID']) ? (int) $row['latestPaymentID'] : 0;
+        $financials = summarize_invoice_financials($row);
 
         $items[] = [
             'invoiceNumber' => $invoiceNumber,
@@ -72,10 +91,16 @@ if ($result) {
             'phone_number' => isset($row['phone_number']) ? (string) $row['phone_number'] : '',
             'tenantID' => (int) $row['tenantID'],
             'amountDue' => (float) $row['amountDue'],
+            'rent_amount' => isset($row['rent_amount']) ? (float) $row['rent_amount'] : 0.0,
+            'deposit_amount' => isset($row['deposit_amount']) ? (float) $row['deposit_amount'] : 0.0,
+            'credit_applied' => isset($row['credit_applied']) ? (float) $row['credit_applied'] : 0.0,
+            'total_paid' => isset($row['total_paid']) ? (float) $row['total_paid'] : 0.0,
+            'rent_due_amount' => (float) $financials['rent_due'],
+            'deposit_due_amount' => (float) $financials['deposit_due'],
             'total_amount' => (float) $row['total_amount'],
             'dateOfInvoice' => isset($row['dateOfInvoice']) ? (string) $row['dateOfInvoice'] : '',
             'dateDue' => isset($row['dateDue']) ? (string) $row['dateDue'] : '',
-            'status' => isset($row['status']) ? (string) $row['status'] : '',
+            'status' => (string) $financials['status'],
             'comment' => isset($row['comment']) ? (string) $row['comment'] : '',
             'latestPaymentID' => $latestPaymentId,
             'invoice_pdf_url' => $baseAppUrl . 'invoice-pdf.php?invoice=' . rawurlencode($invoiceNumber),

@@ -134,7 +134,7 @@ function ensure_tenant_portal_tables($connection) {
     }
 }
 
-function ensure_tenant_user_account($connection, $tenantId, $tenantName, $email, $phoneNumber) {
+function ensure_tenant_user_account($connection, $tenantId, $tenantName, $email, $phoneNumber, $passwordHash = null) {
     $tenantId = (int) $tenantId;
     $email = is_email($email);
     $tenantName = is_username($tenantName);
@@ -144,19 +144,25 @@ function ensure_tenant_user_account($connection, $tenantId, $tenantName, $email,
         return false;
     }
 
-    $passwordHash = password_hash($phoneNumber, PASSWORD_BCRYPT, ['cost' => 12]);
+    $resolvedPasswordHash = is_string($passwordHash) && $passwordHash !== ''
+        ? $passwordHash
+        : password_hash($phoneNumber, PASSWORD_BCRYPT, ['cost' => 12]);
     $safeEmail = mysqli_real_escape_string($connection, $email);
     $safeName = mysqli_real_escape_string($connection, $tenantName);
-    $safePassword = mysqli_real_escape_string($connection, $passwordHash);
+    $safePassword = mysqli_real_escape_string($connection, $resolvedPasswordHash);
 
     $existingByTenant = mysqli_query($connection, "SELECT `id` FROM `admin` WHERE `tenant_id`='$tenantId' LIMIT 1");
     if ($existingByTenant && mysqli_num_rows($existingByTenant) === 1) {
         $row = mysqli_fetch_assoc($existingByTenant);
-        return (bool) mysqli_query($connection, "
+        $sql = "
             UPDATE `admin`
-            SET `email`='$safeEmail', `name`='$safeName', `password`='$safePassword', `role`='user'
-            WHERE `id`='" . (int) $row['id'] . "'
-        ");
+            SET `email`='$safeEmail', `name`='$safeName', `role`='user'
+        ";
+        if (is_string($passwordHash) && $passwordHash !== '') {
+            $sql .= ", `password`='$safePassword'";
+        }
+        $sql .= " WHERE `id`='" . (int) $row['id'] . "'";
+        return (bool) mysqli_query($connection, $sql);
     }
 
     $existingByEmail = mysqli_query($connection, "SELECT `id`, `role` FROM `admin` WHERE `email`='$safeEmail' LIMIT 1");
@@ -167,11 +173,15 @@ function ensure_tenant_user_account($connection, $tenantId, $tenantName, $email,
             return false;
         }
 
-        return (bool) mysqli_query($connection, "
+        $sql = "
             UPDATE `admin`
-            SET `name`='$safeName', `password`='$safePassword', `role`='user', `tenant_id`='$tenantId'
-            WHERE `id`='" . (int) $row['id'] . "'
-        ");
+            SET `name`='$safeName', `role`='user', `tenant_id`='$tenantId'
+        ";
+        if (is_string($passwordHash) && $passwordHash !== '') {
+            $sql .= ", `password`='$safePassword'";
+        }
+        $sql .= " WHERE `id`='" . (int) $row['id'] . "'";
+        return (bool) mysqli_query($connection, $sql);
     }
 
     return (bool) mysqli_query($connection, "

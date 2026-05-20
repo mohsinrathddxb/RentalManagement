@@ -50,6 +50,26 @@ function normalize_house_pic_type($picType) {
     return in_array($picType, $allowedTypes, true) ? $picType : 'Beds';
 }
 
+function house_photo_public_path($storedPath) {
+    $storedPath = trim((string) $storedPath);
+    if ($storedPath === '') {
+        return '';
+    }
+
+    $normalized = str_replace('\\', '/', $storedPath);
+    $normalized = ltrim($normalized, '/');
+
+    if (strpos($normalized, 'admin/') === 0) {
+        return '/' . $normalized;
+    }
+
+    if (strpos($normalized, 'uploads/house_photos/') === 0) {
+        return '/admin/' . $normalized;
+    }
+
+    return '/' . $normalized;
+}
+
 function detect_image_extension($tmpName) {
     if (!is_file($tmpName)) {
         return false;

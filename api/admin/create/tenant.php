@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../../../admin/functions/country_options.php';
+require_once __DIR__ . '/../../../admin/functions/telegram_helpers.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     api_json(['ok' => false, 'message' => 'Method not allowed.'], 405);
@@ -18,15 +19,19 @@ $house = isset($input['house']) ? uncrack((string) $input['house']) : '';
 $partitionId = isset($input['partition_id']) ? (int) $input['partition_id'] : 0;
 $tenantRows = isset($input['tenants']) && is_array($input['tenants']) ? $input['tenants'] : [];
 
-if ($house === '' || strpos($house, '_') === false || $partitionId <= 0 || count($tenantRows) === 0) {
+if ($house === '' || $partitionId <= 0 || count($tenantRows) === 0) {
     api_json(['ok' => false, 'message' => 'House, partition, and at least one tenant are required.'], 422);
 }
 
 $dateAdmitted = date('20y-m-d');
-$houseid = substr($house, 0, strpos($house, '_'));
+$houseid = (int) $house;
+if ($houseid <= 0 && strpos($house, '_') !== false) {
+    $houseid = (int) substr($house, 0, strpos($house, '_'));
+}
+$houseid = (int) $houseid;
 $timesnap = date('Y-m-d : H:i:s');
 
-$recHouse = mysqli_query($conn, "SELECT `house_name`,`rent_amount` FROM `houses` WHERE `houseID`='$houseid'");
+$recHouse = mysqli_query($conn, "SELECT `house_name`,`rent_amount`,`house_status` FROM `houses` WHERE `houseID`='$houseid'");
 $houseItem = $recHouse ? mysqli_fetch_array($recHouse, MYSQLI_BOTH) : null;
 if (!$houseItem) {
     api_json(['ok' => false, 'message' => 'House could not be found.'], 404);
@@ -41,7 +46,6 @@ if (!$partitionItem) {
 $hsname = $houseItem['house_name'];
 $partitionNumber = $partitionItem['partition_number'];
 $tenantCountValue = count($tenantRows);
-$sqHouses = "UPDATE `houses` SET `house_status`='Occupied' WHERE `houseID`='$houseid'";
 $sqPartitionUpdate = "UPDATE `house_partitions` SET `partition_status`='Occupied' WHERE `partition_id`='$partitionId'";
 $sqlTransactions = "INSERT INTO `transactions` (`actor`,`time`,`description`) VALUES ('Admin ($username)', '$timesnap','$username admitted $tenantCountValue tenant(s) to $hsname partition $partitionNumber at $timesnap')";
 
@@ -100,8 +104,8 @@ foreach ($tenantRows as $tenantRow) {
     }
 }
 
-$mysqli->query($sqHouses) ? null : $status = false;
 $mysqli->query($sqPartitionUpdate) ? null : $status = false;
+$status && !sync_house_status_from_partitions($connection, $houseid, (string) $houseItem['house_status']) ? $status = false : null;
 $mysqli->query($sqlTransactions) ? null : $status = false;
 
 if (!$status) {
